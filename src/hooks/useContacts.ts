@@ -1,6 +1,6 @@
-import { useQuery, UseQueryResult } from '@tanstack/react-query';
+import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { contactsApi } from '../api/contacts.api';
-import { ContactsResponse, ContactsQueryParams } from '../types/contact.types';
+import { type ContactsResponse, type ContactsQueryParams } from '../types/contact.types';
 
 export const CONTACTS_QUERY_KEY = 'contacts';
 

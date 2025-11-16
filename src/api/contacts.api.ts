@@ -1,5 +1,5 @@
 import { apiClient } from './axios.config';
-import { ContactsResponse, ContactsQueryParams } from '../types/contact.types';
+import { type ContactsResponse, type ContactsQueryParams } from '../types/contact.types';
 
 export const contactsApi = {
   /**
