@@ -5,11 +5,13 @@ import { type ContactsResponse, type ContactsQueryParams } from '../types/contac
 export const CONTACTS_QUERY_KEY = 'contacts';
 
 export const useContacts = (
-  params: ContactsQueryParams = {}
+  params: ContactsQueryParams = {},
+  enabled: boolean = true
 ): UseQueryResult<ContactsResponse, Error> => {
   return useQuery({
     queryKey: [CONTACTS_QUERY_KEY, params],
     queryFn: () => contactsApi.getContacts(params),
+    enabled,
     staleTime: 5 * 60 * 1000, // 5 minutos
     refetchOnWindowFocus: false,
   });

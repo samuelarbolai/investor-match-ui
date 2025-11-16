@@ -57,3 +57,54 @@ export interface ContactsQueryParams {
   limit?: number;
   startAfter?: number | string;
 }
+
+export interface ContactFilterParams {
+  contact_type?: 'investor' | 'founder';
+  industries?: string[];
+  location_city?: string;
+  location_country?: string;
+  skills?: string[];
+  roles?: string[];
+  funding_stages?: string[];
+  verticals?: string[];
+  product_types?: string[];
+  seniority_levels?: string[];
+  match_mode?: 'all' | 'any';
+  limit?: number;
+}
+
+export interface ContactFilterResponse {
+  data: Contact[];
+  total: number;
+  filters_applied: ContactFilterParams;
+}
+
+export interface CampaignCombination {
+  attributes: string[];
+  match_count: number;
+  description: string;
+}
+
+export interface CampaignAnalysisResponse {
+  contact: Contact;
+  combinations: CampaignCombination[];
+}
+
+export interface MatchOverlap {
+  attribute: string;
+  collection: string;
+  values: string[];
+}
+
+export interface MatchCandidate {
+  contact: Contact;
+  score: number;
+  overlaps: MatchOverlap[];
+}
+
+export interface MatchesResponse {
+  candidates: MatchCandidate[];
+  totalMatches: number;
+  seedContact: Contact;
+  attributes_used: string[];
+}

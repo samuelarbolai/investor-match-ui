@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Paper,
   Table,
@@ -16,21 +17,62 @@ import {
   Stack,
   Tooltip,
   Avatar,
+  Button,
 } from '@mui/material';
 import BusinessIcon from '@mui/icons-material/Business';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import WorkIcon from '@mui/icons-material/Work';
-import type { Contact } from '../types/contact.types';
+import ClearIcon from '@mui/icons-material/Clear';
+import type { Contact, ContactFilterParams } from '../types/contact.types';
 import { useContacts } from '../hooks/useContacts';
+import { useContactFilters } from '../hooks/useContactFilters';
+import { ContactFilters } from './ContactFilters';
 
 export const ContactsTable = () => {
+  const navigate = useNavigate();
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [filters, setFilters] = useState<ContactFilterParams>({});
+  const hasActiveFilters = Object.keys(filters).length > 0;
 
-  const { data, isLoading, isError, error } = useContacts({
-    limit: rowsPerPage,
-    startAfter: page * rowsPerPage,
-  });
+  // Use filtered query if filters are active, otherwise use regular query
+  const { 
+    data: regularData, 
+    isLoading: isLoadingRegular, 
+    isError: isErrorRegular, 
+    error: errorRegular 
+  } = useContacts(
+    {
+      limit: rowsPerPage,
+      startAfter: page * rowsPerPage,
+    },
+    !hasActiveFilters // Only fetch if no filters
+  );
+
+  const { 
+    data: filteredData, 
+    isLoading: isLoadingFiltered, 
+    isError: isErrorFiltered, 
+    error: errorFiltered 
+  } = useContactFilters(
+    { ...filters, limit: rowsPerPage },
+    hasActiveFilters // Only fetch if filters exist
+  );
+
+  const isLoading = hasActiveFilters ? isLoadingFiltered : isLoadingRegular;
+  const isError = hasActiveFilters ? isErrorFiltered : isErrorRegular;
+  const error = hasActiveFilters ? errorFiltered : errorRegular;
+  const data = hasActiveFilters ? filteredData : regularData;
+
+  const handleApplyFilters = (newFilters: ContactFilterParams) => {
+    setFilters(newFilters);
+    setPage(0);
+  };
+
+  const handleClearFilters = () => {
+    setFilters({});
+    setPage(0);
+  };
 
   const handleChangePage = (_event: unknown, newPage: number) => {
     setPage(newPage);
@@ -65,18 +107,124 @@ export const ContactsTable = () => {
   }
 
   const contacts = data?.data || [];
-  const pagination = data?.pagination;
+  const total = hasActiveFilters 
+    ? (data as typeof filteredData)?.total 
+    : (data as typeof regularData)?.pagination?.total;
 
   return (
     <Box>
-      <Box mb={3}>
-        <Typography variant="h4" component="h1" fontWeight={700} gutterBottom>
-          Contacts
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Manage and view all investor and founder contacts
-        </Typography>
+      {/* Header with Filters */}
+      <Box mb={3} display="flex" justifyContent="space-between" alignItems="flex-start" flexWrap="wrap" gap={2}>
+        <Box>
+          <Typography variant="h4" component="h1" fontWeight={700} gutterBottom>
+            Contacts
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Manage and view all investor and founder contacts
+          </Typography>
+        </Box>
+        <Stack direction="row" spacing={2} alignItems="center">
+          {hasActiveFilters && (
+            <Button
+              variant="outlined"
+              startIcon={<ClearIcon />}
+              onClick={handleClearFilters}
+              color="secondary"
+              sx={{ borderRadius: 2 }}
+            >
+              Clear Filters
+            </Button>
+          )}
+          <ContactFilters 
+            onApplyFilters={handleApplyFilters}
+            onClearFilters={handleClearFilters}
+            currentFilters={filters}
+          />
+        </Stack>
       </Box>
+
+      {/* Active Filters Display */}
+      {hasActiveFilters && (
+        <Box mb={2}>
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            {filters.contact_type && (
+              <Chip
+                label={`Type: ${filters.contact_type}`}
+                onDelete={() => {
+                  const { contact_type: _, ...rest } = filters;
+                  setFilters(rest);
+                }}
+                color="primary"
+                size="small"
+              />
+            )}
+            {filters.location_country && (
+              <Chip
+                label={`Country: ${filters.location_country}`}
+                onDelete={() => {
+                  const { location_country: _, ...rest } = filters;
+                  setFilters(rest);
+                }}
+                color="primary"
+                size="small"
+              />
+            )}
+            {filters.location_city && (
+              <Chip
+                label={`City: ${filters.location_city}`}
+                onDelete={() => {
+                  const { location_city: _, ...rest } = filters;
+                  setFilters(rest);
+                }}
+                color="primary"
+                size="small"
+              />
+            )}
+            {filters.industries?.map((industry) => (
+              <Chip
+                key={industry}
+                label={`Industry: ${industry}`}
+                onDelete={() => {
+                  setFilters({
+                    ...filters,
+                    industries: filters.industries?.filter((i) => i !== industry)
+                  });
+                }}
+                color="info"
+                size="small"
+              />
+            ))}
+            {filters.skills?.map((skill) => (
+              <Chip
+                key={skill}
+                label={`Skill: ${skill}`}
+                onDelete={() => {
+                  setFilters({
+                    ...filters,
+                    skills: filters.skills?.filter((s) => s !== skill)
+                  });
+                }}
+                color="success"
+                size="small"
+              />
+            ))}
+            {filters.roles?.map((role) => (
+              <Chip
+                key={role}
+                label={`Role: ${role}`}
+                onDelete={() => {
+                  setFilters({
+                    ...filters,
+                    roles: filters.roles?.filter((r) => r !== role)
+                  });
+                }}
+                color="warning"
+                size="small"
+              />
+            ))}
+          </Stack>
+        </Box>
+      )}
 
       <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
         <TableContainer>
@@ -98,6 +246,7 @@ export const ContactsTable = () => {
                 <TableRow
                   key={contact.id}
                   hover
+                  onClick={() => navigate(`/contact/${contact.id}`)}
                   sx={{
                     '&:last-child td, &:last-child th': { border: 0 },
                     cursor: 'pointer',
@@ -267,21 +416,19 @@ export const ContactsTable = () => {
           </Table>
         </TableContainer>
 
-        {pagination && (
-          <TablePagination
-            rowsPerPageOptions={[5, 10, 25, 50]}
-            component="div"
-            count={pagination.hasMore ? -1 : pagination.total}
-            rowsPerPage={rowsPerPage}
-            page={page}
-            onPageChange={handleChangePage}
-            onRowsPerPageChange={handleChangeRowsPerPage}
-            labelRowsPerPage="Rows per page:"
-            labelDisplayedRows={({ from, to }) =>
-              `${from}-${to} ${pagination.hasMore ? 'of many' : `of ${pagination.total}`}`
-            }
-          />
-        )}
+        <TablePagination
+          rowsPerPageOptions={[5, 10, 25, 50]}
+          component="div"
+          count={total || 0}
+          rowsPerPage={rowsPerPage}
+          page={page}
+          onPageChange={handleChangePage}
+          onRowsPerPageChange={handleChangeRowsPerPage}
+          labelRowsPerPage="Rows per page:"
+          labelDisplayedRows={({ from, to, count }) =>
+            `${from}-${to} of ${count !== -1 ? count : `more than ${to}`}`
+          }
+        />
       </Paper>
     </Box>
   );
