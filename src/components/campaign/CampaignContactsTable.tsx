@@ -13,7 +13,7 @@ import {
   Typography,
   Stack,
 } from '@mui/material';
-import type { Contact } from '../../types/contact.types';
+import type { Contact, MatchCandidate } from '../../types/contact.types';
 import type { CampaignMembershipMap, CampaignStatus } from '../../types/campaign.types';
 
 const STATUS_COLOR_MAP: Record<CampaignStatus, 'default' | 'primary' | 'secondary' | 'success' | 'warning' | 'error'> = {
@@ -31,6 +31,8 @@ interface CampaignContactsTableProps {
   onToggleSelect: (id: string) => void;
   onToggleSelectAll: () => void;
   campaignMembershipMap: CampaignMembershipMap;
+  mode: 'campaign' | 'matches';
+  matchMetaMap?: Record<string, { score: number; overlaps: MatchCandidate['overlaps'] }>;
 }
 
 export const CampaignContactsTable = ({
@@ -39,6 +41,8 @@ export const CampaignContactsTable = ({
   onToggleSelect,
   onToggleSelectAll,
   campaignMembershipMap,
+  mode,
+  matchMetaMap = {},
 }: CampaignContactsTableProps) => {
   const allSelected = contacts.length > 0 && contacts.every((contact) => selectedIds.includes(contact.id));
   const isIndeterminate =
@@ -78,6 +82,12 @@ export const CampaignContactsTable = ({
               <TableCell sx={{ fontWeight: 700 }}>Type</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>Company</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>Campaign Status</TableCell>
+              {mode === 'matches' && (
+                <>
+                  <TableCell sx={{ fontWeight: 700 }}>Match Score</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Top Overlaps</TableCell>
+                </>
+              )}
             </TableRow>
           </TableHead>
           <TableBody>
@@ -140,6 +150,32 @@ export const CampaignContactsTable = ({
                     </Stack>
                   </TableCell>
                   <TableCell>{renderStatus(contact.id)}</TableCell>
+                  {mode === 'matches' && (
+                    <>
+                      <TableCell>
+                        <Chip
+                          label={`Score: ${matchMetaMap[contact.id]?.score ?? '-'}`}
+                          size="small"
+                          color="primary"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                          {(matchMetaMap[contact.id]?.overlaps ?? [])
+                            .slice(0, 3)
+                            .map((overlap, index) => (
+                              <Chip
+                                key={`${contact.id}-overlap-${index}`}
+                                label={`${overlap.attribute.replace(/_/g, ' ')} (${overlap.values.length})`}
+                                size="small"
+                                variant="outlined"
+                                color="success"
+                              />
+                            ))}
+                        </Stack>
+                      </TableCell>
+                    </>
+                  )}
                 </TableRow>
               );
             })}

@@ -1,16 +1,22 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import {
-  Box,
-  Typography,
-  Stack,
-  TablePagination,
-  CircularProgress,
   Alert,
+  Box,
+  CircularProgress,
+  FormControlLabel,
+  Stack,
+  Switch,
+  TablePagination,
+  Typography,
 } from '@mui/material';
 import { CampaignContactsTable } from './CampaignContactsTable';
 import { CampaignActionBar } from './CampaignActionBar';
 import { ContactFilters } from '../ContactFilters';
-import type { Contact, ContactFilterParams } from '../../types/contact.types';
+import type {
+  Contact,
+  ContactFilterParams,
+  MatchCandidate,
+} from '../../types/contact.types';
 import {
   CAMPAIGN_STAGE_OPTIONS,
   type CampaignStatus,
@@ -20,20 +26,25 @@ import { useContacts } from '../../hooks/useContacts';
 import { useContactFilters } from '../../hooks/useContactFilters';
 import { useCampaignMembership } from '../../hooks/useCampaignMembership';
 import { introductionsApi } from '../../api/introductions.api';
+import { useMatches } from '../../hooks/useContactDetail';
+
+type ViewMode = 'campaign' | 'matches';
 
 interface CampaignContactsManagerProps {
   campaignId: string;
+  contactType: 'investor' | 'founder';
 }
 
-export const CampaignContactsManager = ({ campaignId }: CampaignContactsManagerProps) => {
+export const CampaignContactsManager = ({ campaignId, contactType }: CampaignContactsManagerProps) => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [filters, setFilters] = useState<ContactFilterParams>({});
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(5);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('campaign');
 
-  const remoteFilters = useMemo(() => {
+  const remoteFilters = useMemo<Omit<ContactFilterParams, 'campaign_status'>>(() => {
     const { campaign_status, ...rest } = filters;
     return rest;
   }, [filters]);
@@ -47,7 +58,70 @@ export const CampaignContactsManager = ({ campaignId }: CampaignContactsManagerP
     });
   }, [remoteFilters]);
 
-  const shouldUseFilteredQuery = hasRemoteFilters;
+  type ArrayFilterKey =
+    | 'industries'
+    | 'skills'
+    | 'roles'
+    | 'funding_stages'
+    | 'verticals'
+    | 'product_types'
+    | 'seniority_levels';
+
+  const matchesLocalFilter = useCallback(
+    (contact: Contact) => {
+      if (!hasRemoteFilters) {
+        return true;
+      }
+
+      if (remoteFilters.contact_type && contact.contact_type !== remoteFilters.contact_type) {
+        return false;
+      }
+
+      if (remoteFilters.location_country && contact.location_country !== remoteFilters.location_country) {
+        return false;
+      }
+
+      if (remoteFilters.location_city && contact.location_city !== remoteFilters.location_city) {
+        return false;
+      }
+
+      const matchMode = remoteFilters.match_mode ?? 'any';
+      const checkArray = (filterValues?: string[], contactValues?: string[]) => {
+        if (!filterValues || filterValues.length === 0) {
+          return true;
+        }
+        if (!contactValues || contactValues.length === 0) {
+          return false;
+        }
+        return matchMode === 'all'
+          ? filterValues.every((value) => contactValues.includes(value))
+          : filterValues.some((value) => contactValues.includes(value));
+      };
+
+      const arrayChecks: Array<[ArrayFilterKey, ArrayFilterKey]> = [
+        ['industries', 'industries'],
+        ['skills', 'skills'],
+        ['roles', 'roles'],
+        ['funding_stages', 'funding_stages'],
+        ['verticals', 'verticals'],
+        ['product_types', 'product_types'],
+        ['seniority_levels', 'seniority_levels'],
+      ];
+
+      for (const [filterKey, contactKey] of arrayChecks) {
+        const filterValues = remoteFilters[filterKey];
+        const contactValues = contact[contactKey];
+        if (!checkArray(filterValues, contactValues)) {
+          return false;
+        }
+      }
+
+      return true;
+    },
+    [hasRemoteFilters, remoteFilters]
+  );
+
+  const shouldUseFilteredQuery = viewMode === 'campaign' && hasRemoteFilters;
 
   const {
     data: regularData,
@@ -59,7 +133,7 @@ export const CampaignContactsManager = ({ campaignId }: CampaignContactsManagerP
       limit: rowsPerPage,
       startAfter: page * rowsPerPage,
     },
-    !shouldUseFilteredQuery
+    viewMode === 'campaign' && !shouldUseFilteredQuery
   );
 
   const filterQueryParams = useMemo(
@@ -84,15 +158,43 @@ export const CampaignContactsManager = ({ campaignId }: CampaignContactsManagerP
     return regularData?.data ?? [];
   }, [filteredData, regularData, shouldUseFilteredQuery]);
 
-  const contactIds = useMemo(() => baseContacts.map((contact) => contact.id), [baseContacts]);
+  const matchQuery = useMatches(campaignId, contactType, 25);
+  const matchCandidates = useMemo<MatchCandidate[]>(
+    () => matchQuery.data?.candidates ?? [],
+    [matchQuery.data]
+  );
+  const matchContacts = useMemo<Contact[]>(
+    () => matchCandidates.map((candidate) => candidate.contact),
+    [matchCandidates]
+  );
+  const matchMetaMap = useMemo<
+    Record<string, { score: number; overlaps: MatchCandidate['overlaps'] }>
+  >(() => {
+    return matchCandidates.reduce<Record<string, { score: number; overlaps: MatchCandidate['overlaps'] }>>(
+      (acc, candidate) => {
+        acc[candidate.contact.id] = {
+          score: candidate.score,
+          overlaps: candidate.overlaps,
+        };
+        return acc;
+      },
+      {}
+    );
+  }, [matchCandidates]);
+
+  const membershipContactIds = useMemo(() => {
+    const source = viewMode === 'matches' ? matchContacts : baseContacts;
+    return source.map((contact) => contact.id);
+  }, [baseContacts, matchContacts, viewMode]);
+
   const {
     membershipMap,
     isLoading: isMembershipLoading,
     error: membershipError,
     refetch: refetchMembership,
-  } = useCampaignMembership(campaignId, contactIds);
+  } = useCampaignMembership(campaignId, membershipContactIds);
 
-  const contacts = useMemo(() => {
+  const campaignContacts = useMemo(() => {
     if (!filters.campaign_status) {
       return baseContacts;
     }
@@ -103,27 +205,74 @@ export const CampaignContactsManager = ({ campaignId }: CampaignContactsManagerP
     });
   }, [baseContacts, filters.campaign_status, membershipMap]);
 
-  const totalCount = useMemo(() => {
+  const matchesContacts = useMemo(() => {
+    let dataset = matchContacts;
+
+    if (hasRemoteFilters) {
+      dataset = dataset.filter(matchesLocalFilter);
+    }
+
     if (filters.campaign_status) {
+      dataset = dataset.filter((contact) => {
+        const status = membershipMap[contact.id] ?? 'not_in_campaign';
+        return status === filters.campaign_status;
+      });
+    }
+
+    return dataset;
+  }, [matchContacts, hasRemoteFilters, matchesLocalFilter, filters.campaign_status, membershipMap]);
+
+  const contacts = viewMode === 'matches' ? matchesContacts : campaignContacts;
+
+  const totalCount = useMemo(() => {
+    if (viewMode === 'matches' || filters.campaign_status) {
       return contacts.length;
     }
     if (shouldUseFilteredQuery) {
       return filteredData?.total ?? contacts.length;
     }
     return regularData?.pagination?.total ?? contacts.length;
-  }, [contacts.length, filteredData?.total, filters.campaign_status, regularData?.pagination?.total, shouldUseFilteredQuery]);
+  }, [
+    contacts.length,
+    filteredData?.total,
+    filters.campaign_status,
+    regularData?.pagination?.total,
+    shouldUseFilteredQuery,
+    viewMode,
+  ]);
 
-  const isLoading = shouldUseFilteredQuery ? isLoadingFiltered : isLoadingRegular;
-  const isError = shouldUseFilteredQuery ? isErrorFiltered : isErrorRegular;
-  const error = shouldUseFilteredQuery ? errorFiltered : errorRegular;
+  const isBaseLoading =
+    viewMode === 'matches'
+      ? matchQuery.isLoading
+      : shouldUseFilteredQuery
+      ? isLoadingFiltered
+      : isLoadingRegular;
+  const isBaseError =
+    viewMode === 'matches'
+      ? matchQuery.isError
+      : shouldUseFilteredQuery
+      ? isErrorFiltered
+      : isErrorRegular;
+  const baseError =
+    viewMode === 'matches'
+      ? matchQuery.error
+      : shouldUseFilteredQuery
+      ? errorFiltered
+      : errorRegular;
+
+  const displayedContacts = useMemo(() => {
+    if (viewMode === 'matches') {
+      const start = page * rowsPerPage;
+      return contacts.slice(start, start + rowsPerPage);
+    }
+    return contacts;
+  }, [contacts, page, rowsPerPage, viewMode]);
 
   const handleToggleSelect = (id: string) => {
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((selectedId) => selectedId !== id) : [...prev, id]
     );
   };
-
-  const displayedContacts = contacts;
 
   const handleToggleSelectAll = () => {
     if (displayedContacts.every((contact) => selectedIds.includes(contact.id))) {
@@ -215,7 +364,13 @@ export const CampaignContactsManager = ({ campaignId }: CampaignContactsManagerP
     setPage(0);
   };
 
-  if (isLoading) {
+  const handleToggleViewMode = (_event: ChangeEvent<HTMLInputElement>, checked: boolean) => {
+    setViewMode(checked ? 'matches' : 'campaign');
+    setSelectedIds([]);
+    setPage(0);
+  };
+
+  if (isBaseLoading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="300px">
         <CircularProgress />
@@ -223,10 +378,10 @@ export const CampaignContactsManager = ({ campaignId }: CampaignContactsManagerP
     );
   }
 
-  if (isError) {
+  if (isBaseError) {
     return (
       <Alert severity="error">
-        Error loading campaign contacts: {error?.message || 'Unknown error'}
+        Error loading contacts: {baseError?.message || 'Unknown error'}
       </Alert>
     );
   }
@@ -251,21 +406,32 @@ export const CampaignContactsManager = ({ campaignId }: CampaignContactsManagerP
         >
           <Stack spacing={1}>
             <Typography variant="h5" fontWeight={700}>
-              Campaign Contacts Manager
+              Campaign & Matches Manager
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Powered by live contacts from the API; campaign membership is still mocked until the
-              intro stage endpoints are ready.
+              Use the slider to switch between campaign contacts and match suggestions while keeping the same bulk actions.
             </Typography>
           </Stack>
 
-          <ContactFilters
-            onApplyFilters={handleApplyFilters}
-            onClearFilters={handleClearFilters}
-            currentFilters={filters}
-            showCampaignFilters
-            campaignStatusValues={CAMPAIGN_STAGE_OPTIONS}
-          />
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center">
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={viewMode === 'matches'}
+                  onChange={handleToggleViewMode}
+                  inputProps={{ 'aria-label': 'Toggle matches view' }}
+                />
+              }
+              label="Matches view"
+            />
+            <ContactFilters
+              onApplyFilters={handleApplyFilters}
+              onClearFilters={handleClearFilters}
+              currentFilters={filters}
+              showCampaignFilters
+              campaignStatusValues={CAMPAIGN_STAGE_OPTIONS}
+            />
+          </Stack>
         </Box>
       </Stack>
 
@@ -284,7 +450,8 @@ export const CampaignContactsManager = ({ campaignId }: CampaignContactsManagerP
           disabled={isActionLoading || isMembershipLoading}
         />
         <Typography variant="caption" color="text.secondary">
-          Stage distribution: {JSON.stringify(currentStageCounts)}
+          Stage distribution ({viewMode === 'matches' ? 'matches' : 'campaign'} view):{' '}
+          {JSON.stringify(currentStageCounts)}
         </Typography>
       </Stack>
 
@@ -294,6 +461,8 @@ export const CampaignContactsManager = ({ campaignId }: CampaignContactsManagerP
         onToggleSelect={handleToggleSelect}
         onToggleSelectAll={handleToggleSelectAll}
         campaignMembershipMap={membershipMap}
+        mode={viewMode}
+        matchMetaMap={matchMetaMap}
       />
 
       <TablePagination

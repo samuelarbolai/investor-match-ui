@@ -15,7 +15,6 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useContactDetail } from '../hooks/useContactDetail';
 import { ContactDetailTab } from '../components/ContactDetailTabFixed';
 import { CampaignAnalysisTab } from '../components/CampaignAnalysisTab';
-import { MatchesTab } from '../components/MatchesTab';
 import { CampaignContactsManager } from '../components/campaign/CampaignContactsManager';
 
 export const ContactDetailPage = () => {
@@ -89,7 +88,6 @@ export const ContactDetailPage = () => {
         >
           <Tab label="Details" />
           <Tab label="Campaign Analysis" />
-          <Tab label="Matches" />
           <Tab label="Campaign" />
         </Tabs>
 
@@ -102,9 +100,11 @@ export const ContactDetailPage = () => {
             />
           )}
           {currentTab === 2 && (
-            <MatchesTab contactId={contact.id} contactType={contact.contact_type} />
+            <CampaignContactsManager
+              campaignId={contact.id}
+              contactType={contact.contact_type}
+            />
           )}
-          {currentTab === 3 && <CampaignContactsManager campaignId={contact.id} />}
         </Box>
       </Paper>
     </Box>
