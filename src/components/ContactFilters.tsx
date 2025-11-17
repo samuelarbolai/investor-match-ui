@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Box,
   Drawer,
@@ -15,16 +15,22 @@ import {
   Divider,
   Autocomplete,
   Badge,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
 } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import ClearIcon from '@mui/icons-material/Clear';
 import CloseIcon from '@mui/icons-material/Close';
 import type { ContactFilterParams } from '../types/contact.types';
+import type { CampaignStatus } from '../types/campaign.types';
 
 interface ContactFiltersProps {
   onApplyFilters: (filters: ContactFilterParams) => void;
   onClearFilters: () => void;
   currentFilters: ContactFilterParams;
+  showCampaignFilters?: boolean;
+  campaignStatusValues?: CampaignStatus[];
 }
 
 // Options for different filter fields
@@ -56,10 +62,17 @@ const SENIORITY_LEVELS = ['junior', 'mid', 'senior', 'executive', 'c-level'];
 export const ContactFilters = ({ 
   onApplyFilters, 
   onClearFilters,
-  currentFilters 
+  currentFilters,
+  showCampaignFilters = false,
+  campaignStatusValues = ['prospect', 'lead', 'to_meet', 'met', 'not_in_campaign']
 }: ContactFiltersProps) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [localFilters, setLocalFilters] = useState<ContactFilterParams>(currentFilters);
+  const selectedCampaignStatus = localFilters.campaign_status ?? 'any';
+
+  useEffect(() => {
+    setLocalFilters(currentFilters);
+  }, [currentFilters]);
 
   const handleOpenDrawer = () => setDrawerOpen(true);
   const handleCloseDrawer = () => setDrawerOpen(false);
@@ -119,6 +132,41 @@ export const ContactFilters = ({
 
           {/* Filters Form */}
           <Stack spacing={3}>
+            {showCampaignFilters && (
+              <Box>
+                <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+                  Campaign Status
+                </Typography>
+                <FormControl component="fieldset">
+                  <RadioGroup
+                    value={selectedCampaignStatus}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      if (value === 'any') {
+                        const { campaign_status, ...rest } = localFilters;
+                        setLocalFilters(rest);
+                      } else {
+                        setLocalFilters({
+                          ...localFilters,
+                          campaign_status: value as CampaignStatus,
+                        });
+                      }
+                    }}
+                  >
+                    <FormControlLabel value="any" control={<Radio size="small" />} label="Any" />
+                    {campaignStatusValues.map((status) => (
+                      <FormControlLabel
+                        key={status}
+                        value={status}
+                        control={<Radio size="small" />}
+                        label={status.replace(/_/g, ' ')}
+                      />
+                    ))}
+                  </RadioGroup>
+                </FormControl>
+              </Box>
+            )}
+
             {/* Contact Type */}
             <FormControl fullWidth>
               <InputLabel>Contact Type</InputLabel>

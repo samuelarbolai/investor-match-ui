@@ -1,3 +1,5 @@
+import type { CampaignStatus } from './campaign.types';
+
 export interface Contact {
   id: string;
   full_name: string;
@@ -71,6 +73,7 @@ export interface ContactFilterParams {
   seniority_levels?: string[];
   match_mode?: 'all' | 'any';
   limit?: number;
+  campaign_status?: CampaignStatus;
 }
 
 export interface ContactFilterResponse {

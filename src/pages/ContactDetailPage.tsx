@@ -16,6 +16,7 @@ import { useContactDetail } from '../hooks/useContactDetail';
 import { ContactDetailTab } from '../components/ContactDetailTabFixed';
 import { CampaignAnalysisTab } from '../components/CampaignAnalysisTab';
 import { MatchesTab } from '../components/MatchesTab';
+import { CampaignContactsManager } from '../components/campaign/CampaignContactsManager';
 
 export const ContactDetailPage = () => {
   const { contactId } = useParams<{ contactId: string }>();
@@ -89,6 +90,7 @@ export const ContactDetailPage = () => {
           <Tab label="Details" />
           <Tab label="Campaign Analysis" />
           <Tab label="Matches" />
+          <Tab label="Campaign" />
         </Tabs>
 
         <Box p={3}>
@@ -102,6 +104,7 @@ export const ContactDetailPage = () => {
           {currentTab === 2 && (
             <MatchesTab contactId={contact.id} contactType={contact.contact_type} />
           )}
+          {currentTab === 3 && <CampaignContactsManager />}
         </Box>
       </Paper>
     </Box>
