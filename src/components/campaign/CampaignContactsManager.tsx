@@ -22,11 +22,12 @@ import {
   type CampaignStatus,
   toApiCampaignStage,
 } from '../../types/campaign.types';
-import { useContacts } from '../../hooks/useContacts';
-import { useContactFilters } from '../../hooks/useContactFilters';
+import { useContacts, CONTACTS_QUERY_KEY } from '../../hooks/useContacts';
+import { useContactFilters, CONTACT_FILTERS_QUERY_KEY } from '../../hooks/useContactFilters';
 import { useCampaignMembership } from '../../hooks/useCampaignMembership';
 import { introductionsApi } from '../../api/introductions.api';
 import { useMatches } from '../../hooks/useContactDetail';
+import { useQueryClient } from '@tanstack/react-query';
 
 type ViewMode = 'campaign' | 'matches';
 
@@ -36,6 +37,7 @@ interface CampaignContactsManagerProps {
 }
 
 export const CampaignContactsManager = ({ campaignId, contactType }: CampaignContactsManagerProps) => {
+  const queryClient = useQueryClient();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [filters, setFilters] = useState<ContactFilterParams>({});
   const [page, setPage] = useState(0);
@@ -331,6 +333,8 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
         }))
       );
       await refetchMembership();
+      queryClient.invalidateQueries({ queryKey: [CONTACTS_QUERY_KEY] });
+      queryClient.invalidateQueries({ queryKey: [CONTACT_FILTERS_QUERY_KEY] });
       setSelectedIds([]);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to update campaign stages';

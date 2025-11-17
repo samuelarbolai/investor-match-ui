@@ -8,6 +8,37 @@ import {
   type CampaignAnalysisResponse,
   type MatchesResponse,
 } from '../types/contact.types';
+import { toApiCampaignStage, type CampaignStatus } from '../types/campaign.types';
+
+type ApiStageCountFilters = Record<string, { min?: number; max?: number }>;
+
+const buildStageCountFiltersPayload = (
+  filters?: ContactFilterParams['stage_count_filters']
+): ApiStageCountFilters | undefined => {
+  if (!filters) {
+    return undefined;
+  }
+
+  const payload: ApiStageCountFilters = {};
+
+  Object.entries(filters).forEach(([stage, range]) => {
+    if (!range) return;
+    const numericRange: { min?: number; max?: number } = {};
+    if (typeof range.min === 'number' && !Number.isNaN(range.min)) {
+      numericRange.min = range.min;
+    }
+    if (typeof range.max === 'number' && !Number.isNaN(range.max)) {
+      numericRange.max = range.max;
+    }
+    if (numericRange.min === undefined && numericRange.max === undefined) {
+      return;
+    }
+    const apiStage = toApiCampaignStage(stage as CampaignStatus);
+    payload[apiStage] = numericRange;
+  });
+
+  return Object.keys(payload).length > 0 ? payload : undefined;
+};
 
 export const contactsApi = {
   /**
@@ -38,7 +69,10 @@ export const contactsApi = {
    * Filtra contactos según criterios específicos
    */
   filterContacts: async (filters: ContactFilterParams): Promise<ContactFilterResponse> => {
-    const response = await apiClient.post<ContactFilterResponse>('/contacts/filter', filters);
+    const { stage_count_filters, ...rest } = filters;
+    const stagePayload = buildStageCountFiltersPayload(stage_count_filters);
+    const payload = stagePayload ? { ...rest, stage_count_filters: stagePayload } : rest;
+    const response = await apiClient.post<ContactFilterResponse>('/contacts/filter', payload);
     return response.data;
   },
 

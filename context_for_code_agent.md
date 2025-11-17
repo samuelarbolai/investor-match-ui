@@ -1,11 +1,15 @@
-## Campaign Contacts Manager Progress
+## Campaign & Matches Manager (current state)
 
-- Phases 1–7 of the multi-phase plan are complete. We now have `CampaignContactsManager` rendering inside the `ContactDetailPage` under the “Campaign” tab with real contact data, local filters (including campaign status), pagination, and bulk action stubs.
-- Contacts come from the existing `/contacts` and `/contacts/filter` endpoints via `useContacts` / `useContactFilters`. Pagination uses API totals; selection logic respects the current page.
-- Campaign membership is still mocked but now flows through `useCampaignMembership`, which simulates an async fetch and refreshes after every mock action. Replace `fetchMembershipMap` + action handlers when IntroStage endpoints are ready.
+- Tabs collapsed: the Campaign tab now houses both campaign contacts and matches via a slider on the manager header; the old `MatchesTab` is archived under `src/legacy/components/`.
+- `useCampaignMembership` fetches real stages from `/v1/introductions/stage`, normalizes backend enums, and drives chips, filters, and stage counts.
+- All bulk actions call `introductionsApi.bulkUpdateStages`; after success we refetch membership and clear selection. Actions remain enabled in both views.
+- Matches view reuses the table, adds score + overlap columns, and still honors stage filters/selection. Campaign view continues to source data from `/contacts` + `/contacts/filter`.
+- Stage options now include `disqualified`; `ContactFilters` exposes it when campaign filters are shown.
+- `tsconfig.app.json` excludes `src/legacy` so archived components don’t affect builds.
+- Contacts page shows introduction stage counts (one column per stage) fed by cached `stage_counts` on each contact. Filters now support numeric min/max per stage, the table has a column-visibility menu (skills/company/industries hidden by default), the body scrolls horizontally without hiding filters, and a “Refresh Counts” button sits next to Filters (currently just invalidates React Query caches; backend recompute was run once after adding the endpoint).
 
-## Next Steps (IntroStage integration)
+## Notes for Next Session
 
-1. Implement real membership fetch once IntroStage APIs exist, probably keyed by `campaignId` (parameterize `CampaignContactsManager` and `useCampaignMembership` accordingly).
-2. Replace the mock action handlers in `CampaignActionBar` integration with actual API calls (add/remove/change stage) and trigger membership refetches afterward.
-3. Consider persisting/deriving the selected campaign ID per contact (currently hard-coded to `'default-campaign'` in the manager).
+1. To resurrect the standalone matches layout, copy from `src/legacy/components/MatchesTab.tsx`.
+2. Consider caching introductions data or leveraging `/v1/introductions/stage/summary` to avoid fetching the entire owner pipeline every membership load.
+3. API Postman collections live in `investor-match-api/postman/`; set `baseUrl`/IDs there before manual testing from the UI workflow.

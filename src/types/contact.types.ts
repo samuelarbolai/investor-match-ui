@@ -1,4 +1,4 @@
-import type { CampaignStatus } from './campaign.types';
+import type { CampaignStageApi, CampaignStatus } from './campaign.types';
 
 export interface Contact {
   id: string;
@@ -41,6 +41,7 @@ export interface Contact {
     _seconds: number;
     _nanoseconds: number;
   };
+  stage_counts?: Partial<Record<CampaignStageApi, number>>;
 }
 
 export interface Pagination {
@@ -74,6 +75,7 @@ export interface ContactFilterParams {
   match_mode?: 'all' | 'any';
   limit?: number;
   campaign_status?: CampaignStatus;
+  stage_count_filters?: StageCountFilterParams;
 }
 
 export interface ContactFilterResponse {
@@ -81,6 +83,13 @@ export interface ContactFilterResponse {
   total: number;
   filters_applied: ContactFilterParams;
 }
+
+export interface StageCountFilterRange {
+  min?: number;
+  max?: number;
+}
+
+export type StageCountFilterParams = Partial<Record<CampaignStatus, StageCountFilterRange>>;
 
 export interface CampaignCombination {
   attributes: string[];

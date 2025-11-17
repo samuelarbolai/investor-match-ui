@@ -24,6 +24,7 @@ import ClearIcon from '@mui/icons-material/Clear';
 import CloseIcon from '@mui/icons-material/Close';
 import type { ContactFilterParams } from '../types/contact.types';
 import type { CampaignStatus } from '../types/campaign.types';
+import { CAMPAIGN_STAGE_OPTIONS } from '../types/campaign.types';
 
 interface ContactFiltersProps {
   onApplyFilters: (filters: ContactFilterParams) => void;
@@ -64,11 +65,44 @@ export const ContactFilters = ({
   onClearFilters,
   currentFilters,
   showCampaignFilters = false,
-  campaignStatusValues = ['prospect', 'lead', 'to_meet', 'met', 'not_in_campaign', 'disqualified']
+  campaignStatusValues = CAMPAIGN_STAGE_OPTIONS
 }: ContactFiltersProps) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [localFilters, setLocalFilters] = useState<ContactFilterParams>(currentFilters);
   const selectedCampaignStatus = localFilters.campaign_status ?? 'any';
+  const stageCountFilters = localFilters.stage_count_filters ?? {};
+
+  const formatStageLabel = (status: CampaignStatus) => status.replace(/_/g, ' ');
+
+  const handleStageCountChange = (stage: CampaignStatus, key: 'min' | 'max', rawValue: string) => {
+    const parsedValue = rawValue === '' ? undefined : Number(rawValue);
+    if (parsedValue !== undefined && Number.isNaN(parsedValue)) {
+      return;
+    }
+
+    setLocalFilters((prev) => {
+      const nextFilters = { ...(prev.stage_count_filters ?? {}) };
+      const currentRange = nextFilters[stage] ?? {};
+      const updatedRange = { ...currentRange, [key]: parsedValue };
+
+      if (updatedRange.min === undefined && updatedRange.max === undefined) {
+        delete nextFilters[stage];
+      } else {
+        nextFilters[stage] = updatedRange;
+      }
+
+      const cleanedFilters = { ...prev };
+      if (Object.keys(nextFilters).length === 0) {
+        delete cleanedFilters.stage_count_filters;
+        return cleanedFilters;
+      }
+
+      return {
+        ...prev,
+        stage_count_filters: nextFilters,
+      };
+    });
+  };
 
   useEffect(() => {
     setLocalFilters(currentFilters);
@@ -88,13 +122,24 @@ export const ContactFilters = ({
     handleCloseDrawer();
   };
 
-  const activeFiltersCount = Object.keys(currentFilters).filter(
-    key => currentFilters[key as keyof ContactFilterParams] !== undefined &&
-           currentFilters[key as keyof ContactFilterParams] !== null &&
-           (Array.isArray(currentFilters[key as keyof ContactFilterParams]) 
-             ? (currentFilters[key as keyof ContactFilterParams] as string[]).length > 0 
-             : true)
+  const baseFilterCount = Object.entries(currentFilters).reduce((count, [key, value]) => {
+    if (key === 'stage_count_filters') {
+      return count;
+    }
+    if (Array.isArray(value)) {
+      return value.length > 0 ? count + 1 : count;
+    }
+    if (value !== undefined && value !== null && value !== '') {
+      return count + 1;
+    }
+    return count;
+  }, 0);
+
+  const stageFilterCount = Object.values(currentFilters.stage_count_filters ?? {}).filter(
+    (range) => range && (range.min !== undefined || range.max !== undefined)
   ).length;
+
+  const activeFiltersCount = baseFilterCount + stageFilterCount;
 
   return (
     <>
@@ -166,6 +211,42 @@ export const ContactFilters = ({
                 </FormControl>
               </Box>
             )}
+
+            <Box>
+              <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+                Stage Counts
+              </Typography>
+              <Stack spacing={2}>
+                {campaignStatusValues.map((status) => {
+                  const range = stageCountFilters[status];
+                  return (
+                    <Stack
+                      key={status}
+                      direction={{ xs: 'column', sm: 'row' }}
+                      spacing={1}
+                      alignItems="center"
+                    >
+                      <TextField
+                        type="number"
+                        label={`${formatStageLabel(status)} Min`}
+                        value={range?.min ?? ''}
+                        onChange={(event) => handleStageCountChange(status, 'min', event.target.value)}
+                        fullWidth
+                        InputProps={{ inputProps: { min: 0 } }}
+                      />
+                      <TextField
+                        type="number"
+                        label={`${formatStageLabel(status)} Max`}
+                        value={range?.max ?? ''}
+                        onChange={(event) => handleStageCountChange(status, 'max', event.target.value)}
+                        fullWidth
+                        InputProps={{ inputProps: { min: 0 } }}
+                      />
+                    </Stack>
+                  );
+                })}
+              </Stack>
+            </Box>
 
             {/* Contact Type */}
             <FormControl fullWidth>
