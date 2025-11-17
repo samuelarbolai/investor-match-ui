@@ -1,29 +1,28 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { CampaignMembershipMap, CampaignStatus } from '../types/campaign.types';
+import type { CampaignMembershipMap } from '../types/campaign.types';
+import { fromApiCampaignStage } from '../types/campaign.types';
+import { introductionsApi } from '../api/introductions.api';
 
-const STAGE_SEQUENCE: CampaignStatus[] = ['prospect', 'lead', 'to_meet', 'met', 'not_in_campaign'];
-
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-// TODO: Replace with real IntroStage API once available
 export async function fetchMembershipMap(
   campaignId: string,
   contactIds: string[] = []
 ): Promise<CampaignMembershipMap> {
-  await delay(350);
-
-  const baseMap: CampaignMembershipMap = {
-    contact_1: 'prospect',
-    contact_2: 'lead',
-    contact_3: 'to_meet',
-  };
-
-  if (!contactIds.length) {
-    return baseMap;
+  if (!campaignId) {
+    return {};
   }
 
-  return contactIds.reduce<CampaignMembershipMap>((acc, contactId, index) => {
-    acc[contactId] = STAGE_SEQUENCE[index % STAGE_SEQUENCE.length];
+  const introductions = await introductionsApi.listStages(campaignId);
+  const fullMap = introductions.reduce<CampaignMembershipMap>((acc, introduction) => {
+    acc[introduction.targetId] = fromApiCampaignStage(introduction.stage);
+    return acc;
+  }, {});
+
+  if (!contactIds.length) {
+    return fullMap;
+  }
+
+  return contactIds.reduce<CampaignMembershipMap>((acc, contactId) => {
+    acc[contactId] = fullMap[contactId] ?? null;
     return acc;
   }, {});
 }
@@ -40,6 +39,10 @@ export function useCampaignMembership(campaignId: string, contactIds: string[]) 
     try {
       setIsLoading(true);
       setError(null);
+      if (!campaignId) {
+        setMembershipMap({});
+        return;
+      }
       const map = await fetchMembershipMap(campaignId, memoizedContactIds);
       setMembershipMap(map);
     } catch (err) {
@@ -51,7 +54,7 @@ export function useCampaignMembership(campaignId: string, contactIds: string[]) 
 
   useEffect(() => {
     loadMembership();
-  }, [loadMembership, contactKey]);
+  }, [loadMembership]);
 
   return {
     membershipMap,

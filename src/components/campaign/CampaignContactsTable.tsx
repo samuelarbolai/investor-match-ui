@@ -16,12 +16,13 @@ import {
 import type { Contact } from '../../types/contact.types';
 import type { CampaignMembershipMap, CampaignStatus } from '../../types/campaign.types';
 
-const STATUS_COLOR_MAP: Record<CampaignStatus, 'default' | 'primary' | 'secondary' | 'success' | 'warning'> = {
+const STATUS_COLOR_MAP: Record<CampaignStatus, 'default' | 'primary' | 'secondary' | 'success' | 'warning' | 'error'> = {
   prospect: 'primary',
   lead: 'secondary',
   to_meet: 'warning',
   met: 'success',
   not_in_campaign: 'default',
+  disqualified: 'error',
 };
 
 interface CampaignContactsTableProps {

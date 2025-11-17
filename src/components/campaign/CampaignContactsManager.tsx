@@ -11,18 +11,27 @@ import { CampaignContactsTable } from './CampaignContactsTable';
 import { CampaignActionBar } from './CampaignActionBar';
 import { ContactFilters } from '../ContactFilters';
 import type { Contact, ContactFilterParams } from '../../types/contact.types';
-import type { CampaignStatus } from '../../types/campaign.types';
+import {
+  CAMPAIGN_STAGE_OPTIONS,
+  type CampaignStatus,
+  toApiCampaignStage,
+} from '../../types/campaign.types';
 import { useContacts } from '../../hooks/useContacts';
 import { useContactFilters } from '../../hooks/useContactFilters';
 import { useCampaignMembership } from '../../hooks/useCampaignMembership';
+import { introductionsApi } from '../../api/introductions.api';
 
-const STAGE_OPTIONS: CampaignStatus[] = ['prospect', 'lead', 'to_meet', 'met', 'not_in_campaign'];
+interface CampaignContactsManagerProps {
+  campaignId: string;
+}
 
-export const CampaignContactsManager = () => {
+export const CampaignContactsManager = ({ campaignId }: CampaignContactsManagerProps) => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [filters, setFilters] = useState<ContactFilterParams>({});
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(5);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [isActionLoading, setIsActionLoading] = useState(false);
 
   const remoteFilters = useMemo(() => {
     const { campaign_status, ...rest } = filters;
@@ -81,7 +90,7 @@ export const CampaignContactsManager = () => {
     isLoading: isMembershipLoading,
     error: membershipError,
     refetch: refetchMembership,
-  } = useCampaignMembership('default-campaign', contactIds);
+  } = useCampaignMembership(campaignId, contactIds);
 
   const contacts = useMemo(() => {
     if (!filters.campaign_status) {
@@ -152,23 +161,40 @@ export const CampaignContactsManager = () => {
         to_meet: 0,
         met: 0,
         not_in_campaign: 0,
+        disqualified: 0,
       }
     );
   }, [displayedContacts, membershipMap]);
 
-  const simulateAction = async (actionName: string, extra?: Record<string, unknown>) => {
-    // TODO: Replace with real API calls in later phases
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    console.info(`[Mock Action]: ${actionName}`, {
-      selectedIds,
-      ...extra,
-    });
-    await refetchMembership();
+  const runStageUpdate = async (stage: CampaignStatus) => {
+    if (!selectedIds.length) {
+      return;
+    }
+
+    try {
+      setActionError(null);
+      setIsActionLoading(true);
+      await introductionsApi.bulkUpdateStages(
+        campaignId,
+        selectedIds.map((targetId) => ({
+          targetId,
+          stage: toApiCampaignStage(stage),
+        }))
+      );
+      await refetchMembership();
+      setSelectedIds([]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to update campaign stages';
+      setActionError(message);
+      console.error('[CampaignContacts] stage update failed', err);
+    } finally {
+      setIsActionLoading(false);
+    }
   };
 
-  const handleAddToCampaign = () => simulateAction('add_to_campaign');
-  const handleRemoveFromCampaign = () => simulateAction('remove_from_campaign');
-  const handleChangeStage = (stage: CampaignStatus) => simulateAction('change_stage', { stage });
+  const handleAddToCampaign = () => runStageUpdate('prospect');
+  const handleRemoveFromCampaign = () => runStageUpdate('not_in_campaign');
+  const handleChangeStage = (stage: CampaignStatus) => runStageUpdate(stage);
 
   const handleApplyFilters = (newFilters: ContactFilterParams) => {
     setFilters(newFilters);
@@ -238,18 +264,24 @@ export const CampaignContactsManager = () => {
             onClearFilters={handleClearFilters}
             currentFilters={filters}
             showCampaignFilters
-            campaignStatusValues={STAGE_OPTIONS}
+            campaignStatusValues={CAMPAIGN_STAGE_OPTIONS}
           />
         </Box>
       </Stack>
 
       <Stack spacing={2} mb={2}>
+        {actionError && (
+          <Alert severity="error" onClose={() => setActionError(null)}>
+            {actionError}
+          </Alert>
+        )}
         <CampaignActionBar
           selectedCount={selectedIds.length}
           onAddToCampaign={handleAddToCampaign}
           onRemoveFromCampaign={handleRemoveFromCampaign}
           onChangeStage={handleChangeStage}
-          stageOptions={STAGE_OPTIONS}
+          stageOptions={CAMPAIGN_STAGE_OPTIONS}
+          disabled={isActionLoading || isMembershipLoading}
         />
         <Typography variant="caption" color="text.secondary">
           Stage distribution: {JSON.stringify(currentStageCounts)}

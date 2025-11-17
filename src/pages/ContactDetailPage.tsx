@@ -104,7 +104,7 @@ export const ContactDetailPage = () => {
           {currentTab === 2 && (
             <MatchesTab contactId={contact.id} contactType={contact.contact_type} />
           )}
-          {currentTab === 3 && <CampaignContactsManager />}
+          {currentTab === 3 && <CampaignContactsManager campaignId={contact.id} />}
         </Box>
       </Paper>
     </Box>

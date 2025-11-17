@@ -64,7 +64,7 @@ export const ContactFilters = ({
   onClearFilters,
   currentFilters,
   showCampaignFilters = false,
-  campaignStatusValues = ['prospect', 'lead', 'to_meet', 'met', 'not_in_campaign']
+  campaignStatusValues = ['prospect', 'lead', 'to_meet', 'met', 'not_in_campaign', 'disqualified']
 }: ContactFiltersProps) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [localFilters, setLocalFilters] = useState<ContactFilterParams>(currentFilters);
