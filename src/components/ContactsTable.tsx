@@ -25,6 +25,8 @@ import {
   Checkbox,
   Divider,
 } from '@mui/material';
+import KeyboardArrowLeft from '@mui/icons-material/KeyboardArrowLeft';
+import KeyboardArrowRight from '@mui/icons-material/KeyboardArrowRight';
 import BusinessIcon from '@mui/icons-material/Business';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import WorkIcon from '@mui/icons-material/Work';
@@ -45,8 +47,14 @@ import { ContactFilters } from './ContactFilters';
 
 const formatStageLabel = (status: CampaignStatus) => status.replace(/_/g, ' ');
 
+const formatActionStatus = (status?: 'action_required' | 'waiting') => {
+  if (status === 'action_required') return 'Action Required';
+  if (status === 'waiting') return 'Waiting';
+  return '—';
+};
+
 const mapStageCountsToUi = (
-  counts?: Partial<Record<CampaignStageApi, number>>
+  _counts?: Partial<Record<CampaignStageApi, number>>
 ): Record<CampaignStatus, number> => {
   return CAMPAIGN_STAGE_OPTIONS.reduce((acc, status) => {
     acc[status] = 0;
@@ -71,6 +79,7 @@ const mergeStageCounts = (
 type TableColumnKey =
   | 'contact'
   | 'type'
+  | 'actionStatus'
   | 'location'
   | 'company'
   | 'skills'
@@ -81,6 +90,7 @@ type TableColumnKey =
 const DEFAULT_COLUMN_VISIBILITY: Record<TableColumnKey, boolean> = {
   contact: true,
   type: true,
+  actionStatus: true,
   location: true,
   company: false,
   skills: false,
@@ -121,6 +131,7 @@ export const ContactsTable = () => {
   const columnOptions: { key: TableColumnKey; label: string; disabled?: boolean }[] = [
     { key: 'contact', label: 'Contact', disabled: true },
     { key: 'type', label: 'Type' },
+    { key: 'actionStatus', label: 'Action Status' },
     { key: 'location', label: 'Location' },
     { key: 'company', label: 'Company' },
     { key: 'skills', label: 'Skills' },
@@ -161,7 +172,7 @@ export const ContactsTable = () => {
     isError: isErrorFiltered, 
     error: errorFiltered 
   } = useContactFilters(
-    { ...filters, limit: rowsPerPage },
+    { ...filters, limit: rowsPerPage, startAfter: page * rowsPerPage },
     hasActiveFilters // Only fetch if filters exist
   );
 
@@ -213,9 +224,35 @@ export const ContactsTable = () => {
   }
 
   const contacts = data?.data || [];
-  const total = hasActiveFilters 
-    ? (data as typeof filteredData)?.total 
-    : (data as typeof regularData)?.pagination?.total;
+
+  // Custom actions to always allow going to next page even with unknown total
+  const PaginationActions = ({
+    page,
+    onPageChange,
+  }: {
+    count: number;
+    page: number;
+    rowsPerPage: number;
+    onPageChange: (event: React.MouseEvent<HTMLButtonElement> | null, newPage: number) => void;
+  }) => {
+    return (
+      <Box sx={{ flexShrink: 0, ml: 2.5 }}>
+        <IconButton
+          onClick={(event) => onPageChange(event, page - 1)}
+          disabled={page === 0}
+          aria-label="previous page"
+        >
+          <KeyboardArrowLeft />
+        </IconButton>
+        <IconButton
+          onClick={(event) => onPageChange(event, page + 1)}
+          aria-label="next page"
+        >
+          <KeyboardArrowRight />
+        </IconButton>
+      </Box>
+    );
+  };
 
   return (
     <Box>
@@ -425,14 +462,17 @@ export const ContactsTable = () => {
             overflowX: 'auto',
           }}
         >
-          <Table sx={{ minWidth: 650 }} size="small">
+          <Table sx={{ minWidth: 1100 }} size="small">
             <TableHead>
-              <TableRow sx={{ backgroundColor: 'grey.50' }}>
+              <TableRow sx={{ backgroundColor: 'grey.50', '& th': { whiteSpace: 'nowrap' } }}>
                 {columnVisibility.contact && (
                   <TableCell sx={{ fontWeight: 700 }}>Contact</TableCell>
                 )}
                 {columnVisibility.type && (
                   <TableCell sx={{ fontWeight: 700 }}>Type</TableCell>
+                )}
+                {columnVisibility.actionStatus && (
+                  <TableCell sx={{ fontWeight: 700 }}>Action Status</TableCell>
                 )}
                 {columnVisibility.location && (
                   <TableCell sx={{ fontWeight: 700 }}>Location</TableCell>
@@ -512,6 +552,22 @@ export const ContactsTable = () => {
                       </TableCell>
                     )}
 
+                    {columnVisibility.actionStatus && (
+                      <TableCell>
+                        {contact.action_status ? (
+                          <Chip
+                            label={formatActionStatus(contact.action_status)}
+                            size="small"
+                            color={contact.action_status === 'action_required' ? 'warning' : 'info'}
+                            variant="filled"
+                            sx={{ fontWeight: 600 }}
+                          />
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">—</Typography>
+                        )}
+                      </TableCell>
+                    )}
+
                     {columnVisibility.location && (
                       <TableCell>
                         <Box display="flex" alignItems="center" gap={0.5}>
@@ -545,7 +601,7 @@ export const ContactsTable = () => {
                     {columnVisibility.skills && (
                       <TableCell>
                         <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
-                          {contact.skills.slice(0, 3).map((skill, index) => (
+                          {(contact.skills ?? []).slice(0, 3).map((skill, index) => (
                             <Chip
                               key={index}
                               label={skill}
@@ -554,10 +610,10 @@ export const ContactsTable = () => {
                               sx={{ mb: 0.5, fontSize: '0.7rem' }}
                             />
                           ))}
-                          {contact.skills.length > 3 && (
-                            <Tooltip title={contact.skills.slice(3).join(', ')}>
+                          {(contact.skills ?? []).length > 3 && (
+                            <Tooltip title={(contact.skills ?? []).slice(3).join(', ')}>
                               <Chip
-                                label={`+${contact.skills.length - 3}`}
+                                label={`+${(contact.skills ?? []).length - 3}`}
                                 size="small"
                                 variant="outlined"
                                 sx={{ mb: 0.5, fontSize: '0.7rem' }}
@@ -571,7 +627,7 @@ export const ContactsTable = () => {
                     {columnVisibility.industries && (
                       <TableCell>
                         <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
-                          {contact.industries.slice(0, 2).map((industry, index) => (
+                          {(contact.industries ?? []).slice(0, 2).map((industry, index) => (
                             <Chip
                               key={index}
                               label={industry}
@@ -581,10 +637,10 @@ export const ContactsTable = () => {
                               sx={{ mb: 0.5, fontSize: '0.7rem' }}
                             />
                           ))}
-                          {contact.industries.length > 2 && (
-                            <Tooltip title={contact.industries.slice(2).join(', ')}>
+                          {(contact.industries ?? []).length > 2 && (
+                            <Tooltip title={(contact.industries ?? []).slice(2).join(', ')}>
                               <Chip
-                                label={`+${contact.industries.length - 2}`}
+                                label={`+${(contact.industries ?? []).length - 2}`}
                                 size="small"
                                 color="info"
                                 variant="outlined"
@@ -599,7 +655,7 @@ export const ContactsTable = () => {
                     {columnVisibility.roles && (
                       <TableCell>
                         <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
-                          {contact.roles.slice(0, 2).map((role, index) => (
+                          {(contact.roles ?? []).slice(0, 2).map((role, index) => (
                             <Chip
                               key={index}
                               label={role}
@@ -609,10 +665,10 @@ export const ContactsTable = () => {
                               sx={{ mb: 0.5, fontSize: '0.7rem' }}
                             />
                           ))}
-                          {contact.roles.length > 2 && (
-                            <Tooltip title={contact.roles.slice(2).join(', ')}>
+                          {(contact.roles ?? []).length > 2 && (
+                            <Tooltip title={(contact.roles ?? []).slice(2).join(', ')}>
                               <Chip
-                                label={`+${contact.roles.length - 2}`}
+                                label={`+${(contact.roles ?? []).length - 2}`}
                                 size="small"
                                 color="success"
                                 variant="outlined"
@@ -627,7 +683,7 @@ export const ContactsTable = () => {
                     {columnVisibility.fundingStages && (
                       <TableCell>
                         <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
-                          {contact.funding_stages.slice(0, 2).map((stage, index) => (
+                          {(contact.funding_stages ?? []).slice(0, 2).map((stage, index) => (
                             <Chip
                               key={index}
                               label={stage.replace('_', ' ')}
@@ -637,10 +693,10 @@ export const ContactsTable = () => {
                               sx={{ mb: 0.5, fontSize: '0.7rem', textTransform: 'capitalize' }}
                             />
                           ))}
-                          {contact.funding_stages.length > 2 && (
-                            <Tooltip title={contact.funding_stages.slice(2).join(', ')}>
+                          {(contact.funding_stages ?? []).length > 2 && (
+                            <Tooltip title={(contact.funding_stages ?? []).slice(2).join(', ')}>
                               <Chip
-                                label={`+${contact.funding_stages.length - 2}`}
+                                label={`+${(contact.funding_stages ?? []).length - 2}`}
                                 size="small"
                                 color="warning"
                                 variant="outlined"
@@ -666,7 +722,8 @@ export const ContactsTable = () => {
         <TablePagination
           rowsPerPageOptions={[5, 10, 25, 50]}
           component="div"
-          count={total || 0}
+          // Use unknown total to always allow next page
+          count={-1}
           rowsPerPage={rowsPerPage}
           page={page}
           onPageChange={handleChangePage}
@@ -675,6 +732,9 @@ export const ContactsTable = () => {
           labelDisplayedRows={({ from, to, count }) =>
             `${from}-${to} of ${count !== -1 ? count : `more than ${to}`}`
           }
+          showFirstButton={false}
+          showLastButton={false}
+          ActionsComponent={PaginationActions}
         />
       </Paper>
     </Box>

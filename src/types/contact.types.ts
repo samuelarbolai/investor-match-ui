@@ -5,6 +5,7 @@ export interface Contact {
   full_name: string;
   headline: string;
   contact_type: 'investor' | 'founder';
+  action_status?: 'action_required' | 'waiting';
   location_city: string;
   location_country: string;
   job_to_be_done: string[];
@@ -74,6 +75,7 @@ export interface ContactFilterParams {
   seniority_levels?: string[];
   match_mode?: 'all' | 'any';
   limit?: number;
+  startAfter?: number | string;
   campaign_status?: CampaignStatus;
   stage_count_filters?: StageCountFilterParams;
 }
