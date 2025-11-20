@@ -8,23 +8,16 @@ import {
   CssBaseline,
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
-import { Sidebar, DRAWER_WIDTH } from '../components/Sidebar';
+import { Sidebar } from '../components/Sidebar';
 
 interface MainLayoutProps {
   children: React.ReactNode;
 }
 
 export const MainLayout = ({ children }: MainLayoutProps) => {
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [desktopOpen, setDesktopOpen] = useState(true);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const handleDrawerToggle = () => {
-    setMobileOpen(!mobileOpen);
-  };
-
-  const handleDesktopToggle = () => {
-    setDesktopOpen(!desktopOpen);
-  };
+  const toggleDrawer = () => setDrawerOpen((prev) => !prev);
 
   return (
     <Box sx={{ display: 'flex' }}>
@@ -34,14 +27,8 @@ export const MainLayout = ({ children }: MainLayoutProps) => {
       <AppBar
         position="fixed"
         sx={{
-          width: { 
-            xs: '100%',
-            md: desktopOpen ? `calc(100% - ${DRAWER_WIDTH}px)` : '100%'
-          },
-          ml: { 
-            xs: 0,
-            md: desktopOpen ? `${DRAWER_WIDTH}px` : 0
-          },
+          width: '100%',
+          ml: 0,
           transition: 'all 0.3s ease',
           backgroundColor: 'background.paper',
           color: 'text.primary',
@@ -55,17 +42,8 @@ export const MainLayout = ({ children }: MainLayoutProps) => {
             color="inherit"
             aria-label="toggle drawer"
             edge="start"
-            onClick={handleDrawerToggle}
-            sx={{ mr: 2, display: { md: 'none' } }}
-          >
-            <MenuIcon />
-          </IconButton>
-          <IconButton
-            color="inherit"
-            aria-label="toggle drawer"
-            edge="start"
-            onClick={handleDesktopToggle}
-            sx={{ mr: 2, display: { xs: 'none', md: 'block' } }}
+            onClick={toggleDrawer}
+            sx={{ mr: 2 }}
           >
             <MenuIcon />
           </IconButton>
@@ -76,11 +54,7 @@ export const MainLayout = ({ children }: MainLayoutProps) => {
       </AppBar>
 
       {/* Sidebar */}
-      <Sidebar 
-        mobileOpen={mobileOpen} 
-        desktopOpen={desktopOpen}
-        onClose={handleDrawerToggle} 
-      />
+      <Sidebar open={drawerOpen} onClose={toggleDrawer} />
 
       {/* Main Content */}
       <Box
@@ -88,10 +62,7 @@ export const MainLayout = ({ children }: MainLayoutProps) => {
         sx={{
           flexGrow: 1,
           p: 3,
-          ml: { 
-            xs: 0,
-            md: desktopOpen ? `${DRAWER_WIDTH}px` : 0
-          },
+          ml: 0,
           transition: 'margin 0.3s ease',
           minHeight: '100vh',
           backgroundColor: 'grey.50',

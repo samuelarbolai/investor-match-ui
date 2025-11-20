@@ -5,7 +5,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   TablePagination,
@@ -307,9 +306,9 @@ export const ContactsTable = () => {
   };
 
   return (
-    <Box>
+    <Box width="98vw" overflow={"scroll"}>
       {/* Header with Filters */}
-      <Box mb={3} display="flex" justifyContent="space-between" alignItems="flex-start" flexWrap="wrap" gap={2}>
+      <Box mb={3} display="flex" justifyContent="space-between" alignItems="flex-start" flexWrap="wrap" gap={2} sx={{ width: '98vw'}}>
         <Box>
           <Typography variant="h4" component="h1" fontWeight={700} gutterBottom>
             Contacts
@@ -505,15 +504,22 @@ export const ContactsTable = () => {
         sx={{
           border: '1px solid',
           borderColor: 'divider',
-          overflow: 'hidden',
+          position: 'relative',
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
-        <TableContainer
-          sx={{
-            width: '100%',
-            overflowX: 'auto',
-          }}
-        >
+        {/* Sólo la tabla scrollea horizontalmente */}
+        <Box sx={{ position: 'relative' }}>
+          <Box
+            sx={{
+              width: '100%',
+              overflowX: 'auto',
+              overflowY: 'hidden',
+              // Mantener un pequeño gap visual sin forzar scroll global
+              py: 1,
+            }}
+          >
           <Table sx={{ minWidth: 1250 }} size="small">
             <TableHead>
               <TableRow sx={{ backgroundColor: 'grey.50', '& th': { whiteSpace: 'nowrap' } }}>
@@ -831,7 +837,8 @@ export const ContactsTable = () => {
               })}
             </TableBody>
           </Table>
-        </TableContainer>
+          </Box>
+        </Box>
 
         <TablePagination
           rowsPerPageOptions={[5, 10, 25, 50]}

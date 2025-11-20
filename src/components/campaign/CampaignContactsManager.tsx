@@ -4,10 +4,18 @@ import {
   Box,
   CircularProgress,
   FormControlLabel,
+  Button,
   Stack,
   Switch,
   TablePagination,
   Typography,
+} from '@mui/material';
+import {
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
 } from '@mui/material';
 import { CampaignContactsTable } from './CampaignContactsTable';
 import { CampaignActionBar } from './CampaignActionBar';
@@ -45,6 +53,8 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
   const [actionError, setActionError] = useState<string | null>(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('campaign');
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingStage, setPendingStage] = useState<CampaignStatus | null>(null);
 
   const remoteFilters = useMemo<Omit<ContactFilterParams, 'campaign_status'>>(() => {
     const { campaign_status, ...rest } = filters;
@@ -347,7 +357,23 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
 
   const handleAddToCampaign = () => runStageUpdate('prospect');
   const handleRemoveFromCampaign = () => runStageUpdate('not_in_campaign');
-  const handleChangeStage = (stage: CampaignStatus) => runStageUpdate(stage);
+  const handleChangeStage = (stage: CampaignStatus) => {
+    if (!selectedIds.length) return;
+    setPendingStage(stage);
+    setConfirmOpen(true);
+  };
+
+  const handleConfirmNo = () => {
+    setConfirmOpen(false);
+    setPendingStage(null);
+  };
+
+  const handleConfirmYes = async () => {
+    if (!pendingStage) return;
+    setConfirmOpen(false);
+    await runStageUpdate(pendingStage);
+    setPendingStage(null);
+  };
 
   const handleApplyFilters = (newFilters: ContactFilterParams) => {
     setFilters(newFilters);
@@ -468,6 +494,24 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
         mode={viewMode}
         matchMetaMap={matchMetaMap}
       />
+
+      {/* Confirmation dialog before changing stage */}
+      <Dialog open={confirmOpen} onClose={handleConfirmNo} fullWidth maxWidth="sm">
+        <DialogTitle>Confirm Stage Change</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This action will trigger a message to the user showing him the new prospects, are you ok with that?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 2, py: 1 }}>
+          <Button onClick={handleConfirmNo} variant="outlined" color="error" disabled={isActionLoading}>
+            No
+          </Button>
+          <Button onClick={handleConfirmYes} variant="contained" color="primary" disabled={isActionLoading}>
+            Yes
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <TablePagination
         component="div"

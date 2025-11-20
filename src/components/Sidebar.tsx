@@ -8,23 +8,22 @@ import {
   Toolbar,
   Box,
   Divider,
-} from '@mui/material';
-import PeopleIcon from '@mui/icons-material/People';
+} from "@mui/material";
+import PeopleIcon from "@mui/icons-material/People";
 
 export const DRAWER_WIDTH = 260;
 
 interface SidebarProps {
-  mobileOpen: boolean;
-  desktopOpen: boolean;
+  open: boolean;
   onClose: () => void;
 }
 
-export const Sidebar = ({ mobileOpen, desktopOpen, onClose }: SidebarProps) => {
+export const Sidebar = ({ open, onClose }: SidebarProps) => {
   const menuItems = [
     {
-      text: 'Contacts',
+      text: "Contacts",
       icon: <PeopleIcon />,
-      path: '/',
+      path: "/",
     },
   ];
 
@@ -33,9 +32,9 @@ export const Sidebar = ({ mobileOpen, desktopOpen, onClose }: SidebarProps) => {
       <Toolbar>
         <Box
           sx={{
-            display: 'flex',
-            alignItems: 'center',
-            width: '100%',
+            display: "flex",
+            alignItems: "center",
+            width: "100%",
             py: 1,
           }}
         >
@@ -44,29 +43,29 @@ export const Sidebar = ({ mobileOpen, desktopOpen, onClose }: SidebarProps) => {
               width: 40,
               height: 40,
               borderRadius: 2,
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
               mr: 2,
             }}
           >
             <Box
               component="span"
               sx={{
-                color: 'white',
+                color: "white",
                 fontWeight: 700,
-                fontSize: '1.25rem',
+                fontSize: "1.25rem",
               }}
             >
               30X
             </Box>
           </Box>
           <Box>
-            <Box sx={{ fontWeight: 700, fontSize: '1.1rem', lineHeight: 1.2 }}>
+            <Box sx={{ fontWeight: 700, fontSize: "1.1rem", lineHeight: 1.2 }}>
               Investor Match
             </Box>
-            <Box sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+            <Box sx={{ fontSize: "0.75rem", color: "text.secondary" }}>
               Management Portal
             </Box>
           </Box>
@@ -80,14 +79,14 @@ export const Sidebar = ({ mobileOpen, desktopOpen, onClose }: SidebarProps) => {
               selected
               sx={{
                 borderRadius: 2,
-                '&.Mui-selected': {
-                  backgroundColor: 'primary.main',
-                  color: 'primary.contrastText',
-                  '&:hover': {
-                    backgroundColor: 'primary.dark',
+                "&.Mui-selected": {
+                  backgroundColor: "primary.main",
+                  color: "primary.contrastText",
+                  "&:hover": {
+                    backgroundColor: "primary.dark",
                   },
-                  '& .MuiListItemIcon-root': {
-                    color: 'primary.contrastText',
+                  "& .MuiListItemIcon-root": {
+                    color: "primary.contrastText",
                   },
                 },
               }}
@@ -99,7 +98,7 @@ export const Sidebar = ({ mobileOpen, desktopOpen, onClose }: SidebarProps) => {
               >
                 {item.icon}
               </ListItemIcon>
-              <ListItemText 
+              <ListItemText
                 primary={item.text}
                 primaryTypographyProps={{
                   fontWeight: 600,
@@ -113,41 +112,19 @@ export const Sidebar = ({ mobileOpen, desktopOpen, onClose }: SidebarProps) => {
   );
 
   return (
-    <Box
-      component="nav"
-      sx={{ flexShrink: { md: 0 } }}
-    >
-      {/* Mobile drawer */}
+    <Box component="nav" sx={{ flexShrink: { md: 0 } }}>
+      {/* Single temporary drawer (overlay) for all breakpoints */}
       <Drawer
         variant="temporary"
-        open={mobileOpen}
+        open={open}
         onClose={onClose}
-        ModalProps={{
-          keepMounted: true, // Better open performance on mobile.
-        }}
+        ModalProps={{ keepMounted: true }}
         sx={{
-          display: { xs: 'block', md: 'none' },
-          '& .MuiDrawer-paper': {
-            boxSizing: 'border-box',
+          "& .MuiDrawer-paper": {
+            boxSizing: "border-box",
             width: DRAWER_WIDTH,
-          },
-        }}
-      >
-        {drawerContent}
-      </Drawer>
-
-      {/* Desktop drawer */}
-      <Drawer
-        variant="persistent"
-        open={desktopOpen}
-        sx={{
-          display: { xs: 'none', md: 'block' },
-          '& .MuiDrawer-paper': {
-            boxSizing: 'border-box',
-            width: DRAWER_WIDTH,
-            borderRight: '1px solid',
-            borderColor: 'divider',
-            transition: 'all 0.3s ease',
+            borderRight: "1px solid",
+            borderColor: "divider",
           },
         }}
       >
