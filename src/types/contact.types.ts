@@ -6,6 +6,9 @@ export interface Contact {
   headline: string;
   contact_type: 'investor' | 'founder';
   action_status?: 'action_required' | 'waiting';
+  distribution_capability_ids?: string[];
+  distribution_capability_labels?: string[];
+  distribution_quality_bucket_ids?: string[]; // e.g. socialmedia_quality_7
   location_city: string;
   location_country: string;
   job_to_be_done: string[];

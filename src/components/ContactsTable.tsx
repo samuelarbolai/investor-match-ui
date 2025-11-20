@@ -80,6 +80,8 @@ type TableColumnKey =
   | 'contact'
   | 'type'
   | 'actionStatus'
+  | 'distributionPlatforms'
+  | 'platformQuality'
   | 'location'
   | 'company'
   | 'skills'
@@ -91,6 +93,8 @@ const DEFAULT_COLUMN_VISIBILITY: Record<TableColumnKey, boolean> = {
   contact: true,
   type: true,
   actionStatus: true,
+  distributionPlatforms: true,
+  platformQuality: true,
   location: true,
   company: false,
   skills: false,
@@ -110,6 +114,8 @@ export const ContactsTable = () => {
   const [columnMenuAnchor, setColumnMenuAnchor] = useState<null | HTMLElement>(null);
   const hasActiveFilters = Object.keys(filters).length > 0;
   const [isRefreshingCounts, setIsRefreshingCounts] = useState(false);
+  // Cursor-based pagination: store the startAfter (last id of previous page)
+  const [cursorStack, setCursorStack] = useState<(string | number | undefined)[]>([0]);
 
   const handleOpenColumnMenu = (event: React.MouseEvent<HTMLElement>) => {
     setColumnMenuAnchor(event.currentTarget);
@@ -132,6 +138,8 @@ export const ContactsTable = () => {
     { key: 'contact', label: 'Contact', disabled: true },
     { key: 'type', label: 'Type' },
     { key: 'actionStatus', label: 'Action Status' },
+    { key: 'distributionPlatforms', label: 'Distribution Platforms' },
+    { key: 'platformQuality', label: 'Platform Quality' },
     { key: 'location', label: 'Location' },
     { key: 'company', label: 'Company' },
     { key: 'skills', label: 'Skills' },
@@ -153,26 +161,28 @@ export const ContactsTable = () => {
   };
 
   // Use filtered query if filters are active, otherwise use regular query
-  const { 
-    data: regularData, 
-    isLoading: isLoadingRegular, 
-    isError: isErrorRegular, 
-    error: errorRegular 
+  const startAfterCursor = cursorStack[page];
+
+  const {
+    data: regularData,
+    isLoading: isLoadingRegular,
+    isError: isErrorRegular,
+    error: errorRegular,
   } = useContacts(
     {
       limit: rowsPerPage,
-      startAfter: page * rowsPerPage,
+      startAfter: startAfterCursor,
     },
     !hasActiveFilters // Only fetch if no filters
   );
 
-  const { 
-    data: filteredData, 
-    isLoading: isLoadingFiltered, 
-    isError: isErrorFiltered, 
-    error: errorFiltered 
+  const {
+    data: filteredData,
+    isLoading: isLoadingFiltered,
+    isError: isErrorFiltered,
+    error: errorFiltered,
   } = useContactFilters(
-    { ...filters, limit: rowsPerPage, startAfter: page * rowsPerPage },
+    { ...filters, limit: rowsPerPage, startAfter: startAfterCursor },
     hasActiveFilters // Only fetch if filters exist
   );
 
@@ -184,20 +194,40 @@ export const ContactsTable = () => {
   const handleApplyFilters = (newFilters: ContactFilterParams) => {
     setFilters(newFilters);
     setPage(0);
+    setCursorStack([0]);
   };
 
   const handleClearFilters = () => {
     setFilters({});
     setPage(0);
+    setCursorStack([0]);
   };
 
   const handleChangePage = (_event: unknown, newPage: number) => {
     setPage(newPage);
   };
 
+  const handleNextPage = () => {
+    // Use last contact id of current page as cursor.
+    const contacts = (hasActiveFilters ? filteredData?.data : regularData?.data) || [];
+    const lastId = contacts.length > 0 ? contacts[contacts.length - 1].id : undefined;
+    setCursorStack((prev) => {
+      const copy = [...prev];
+      copy[page + 1] = lastId; // may be undefined if empty page; backend should return empty next page too.
+      return copy;
+    });
+    setPage((p) => p + 1);
+  };
+
+  const handlePrevPage = () => {
+    if (page === 0) return;
+    setPage((p) => Math.max(0, p - 1));
+  };
+
   const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
+    setCursorStack([0]);
   };
 
   if (isLoading) {
@@ -224,30 +254,52 @@ export const ContactsTable = () => {
   }
 
   const contacts = data?.data || [];
+  const _extractPlatformCategory = (id: string): string => {
+    const parts = id.split('_');
+    if (parts.length === 0) return id;
+    const primary = parts[0];
+    const second = parts[1] && !parts[1].includes('quality') ? parts[1] : '';
+    return [primary, second].filter(Boolean).join(' ');
+  };
+
+  const computeQualityScore = (
+    bucketIds: string[] = []
+  ): { score5: number | null; details: string[]; rawScores: number[] } => {
+    const scores: number[] = [];
+    const details: string[] = [];
+    bucketIds.forEach((b) => {
+      // Accept patterns: something_quality_7, something_quality7, something_quality_tier_7, trailing digits
+      const match = b.match(/quality[_a-z]*?(\d+)/i) || b.match(/(\d+)$/);
+      if (match) {
+        const raw = parseInt(match[1], 10);
+        if (!Number.isNaN(raw)) {
+          // Normalize: if raw > 10 assume 0-100 scale
+          const normalized = raw > 10 ? raw / 10 : raw; // bring to 0-10 scale
+          scores.push(normalized);
+          details.push(`${b.split('_')[0]}: ${normalized}/10`);
+        }
+      }
+    });
+    if (scores.length === 0) return { score5: null, details: [], rawScores: [] };
+    const avg10 = scores.reduce((a, c) => a + c, 0) / scores.length; // average out of 10
+    const mapped = Math.round((avg10 / 10) * 5); // map to 0-5
+    return { score5: Math.min(5, Math.max(0, mapped)), details, rawScores: scores };
+  };
 
   // Custom actions to always allow going to next page even with unknown total
-  const PaginationActions = ({
-    page,
-    onPageChange,
-  }: {
+  interface PaginationActionsProps {
     count: number;
     page: number;
     rowsPerPage: number;
     onPageChange: (event: React.MouseEvent<HTMLButtonElement> | null, newPage: number) => void;
-  }) => {
+  }
+  const PaginationActions = ({ page }: PaginationActionsProps) => {
     return (
       <Box sx={{ flexShrink: 0, ml: 2.5 }}>
-        <IconButton
-          onClick={(event) => onPageChange(event, page - 1)}
-          disabled={page === 0}
-          aria-label="previous page"
-        >
+        <IconButton onClick={handlePrevPage} disabled={page === 0} aria-label="previous page">
           <KeyboardArrowLeft />
         </IconButton>
-        <IconButton
-          onClick={(event) => onPageChange(event, page + 1)}
-          aria-label="next page"
-        >
+        <IconButton onClick={handleNextPage} aria-label="next page">
           <KeyboardArrowRight />
         </IconButton>
       </Box>
@@ -462,7 +514,7 @@ export const ContactsTable = () => {
             overflowX: 'auto',
           }}
         >
-          <Table sx={{ minWidth: 1100 }} size="small">
+          <Table sx={{ minWidth: 1250 }} size="small">
             <TableHead>
               <TableRow sx={{ backgroundColor: 'grey.50', '& th': { whiteSpace: 'nowrap' } }}>
                 {columnVisibility.contact && (
@@ -473,6 +525,12 @@ export const ContactsTable = () => {
                 )}
                 {columnVisibility.actionStatus && (
                   <TableCell sx={{ fontWeight: 700 }}>Action Status</TableCell>
+                )}
+                {columnVisibility.distributionPlatforms && (
+                  <TableCell sx={{ fontWeight: 700 }}>Distribution Platforms</TableCell>
+                )}
+                {columnVisibility.platformQuality && (
+                  <TableCell sx={{ fontWeight: 700 }}>Platform Quality</TableCell>
                 )}
                 {columnVisibility.location && (
                   <TableCell sx={{ fontWeight: 700 }}>Location</TableCell>
@@ -565,6 +623,62 @@ export const ContactsTable = () => {
                         ) : (
                           <Typography variant="body2" color="text.secondary">—</Typography>
                         )}
+                      </TableCell>
+                    )}
+                    {columnVisibility.distributionPlatforms && (
+                      <TableCell>
+                        <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                          {(contact.distribution_capability_labels ?? []).slice(0, 2).map((label, idx) => (
+                            <Tooltip key={idx} title={label}>
+                              <Chip
+                                label={label.length > 20 ? `${label.slice(0, 18)}…` : label}
+                                size="small"
+                                color="secondary"
+                                variant="outlined"
+                                sx={{ mb: 0.5, maxWidth: 120 }}
+                              />
+                            </Tooltip>
+                          ))}
+                          {(contact.distribution_capability_labels ?? []).length > 2 && (
+                            <Tooltip title={(contact.distribution_capability_labels ?? []).slice(2).join(', ')}>
+                              <Chip
+                                label={`+${(contact.distribution_capability_labels ?? []).length - 2}`}
+                                size="small"
+                                variant="outlined"
+                                sx={{ mb: 0.5 }}
+                              />
+                            </Tooltip>
+                          )}
+                          {(contact.distribution_capability_labels ?? []).length === 0 && (
+                            <Typography variant="body2" color="text.secondary">—</Typography>
+                          )}
+                        </Stack>
+                      </TableCell>
+                    )}
+                    {columnVisibility.platformQuality && (
+                      <TableCell>
+                        {(() => {
+                          const { score5, details, rawScores } = computeQualityScore(
+                            contact.distribution_quality_bucket_ids ?? []
+                          );
+                          if (score5 === null) {
+                            return <Typography variant="body2" color="text.secondary">—</Typography>;
+                          }
+                          const stars = '★★★★★'.slice(0, score5).padEnd(5, '☆');
+                          return (
+                            <Tooltip
+                              title={`Avg: ${score5}/5\nRaw: ${rawScores.map((r) => r.toFixed(1)).join(', ')}\n${details.join('\n')}`}
+                            >
+                              <Chip
+                                label={`${score5}/5 ${stars}`}
+                                size="small"
+                                color={score5 >= 4 ? 'success' : score5 >= 2 ? 'warning' : 'default'}
+                                variant="filled"
+                                sx={{ fontWeight: 600 }}
+                              />
+                            </Tooltip>
+                          );
+                        })()}
                       </TableCell>
                     )}
 
