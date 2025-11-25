@@ -44,16 +44,20 @@ export const contactsApi = {
   /**
    * Obtiene la lista de contactos con paginación
    */
-  getContacts: async (params: ContactsQueryParams = {}): Promise<ContactsResponse> => {
-    const { limit = 10, startAfter = 0 } = params;
-    
+  getContacts: async ({
+    limit = 10,
+    startAfter,
+    orderBy,
+    orderDirection = 'asc',
+  }: ContactsQueryParams = {}): Promise<ContactsResponse> => {
     const response = await apiClient.get<ContactsResponse>('/contacts', {
       params: {
         limit,
         startAfter,
+        order_by: orderBy,
+        order_direction: orderDirection,
       },
     });
-    
     return response.data;
   },
 

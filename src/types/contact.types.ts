@@ -60,9 +60,13 @@ export interface ContactsResponse {
   pagination: Pagination;
 }
 
+export type ContactSortField = 'full_name' | 'contact_type' | 'created_at' | 'updated_at';
+
 export interface ContactsQueryParams {
   limit?: number;
-  startAfter?: number | string;
+  startAfter?: string;
+  orderBy?: ContactSortField;
+  orderDirection?: 'asc' | 'desc';
 }
 
 export interface ContactFilterParams {
