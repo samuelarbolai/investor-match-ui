@@ -83,6 +83,8 @@ export interface ContactFilterParams {
   match_mode?: 'all' | 'any';
   limit?: number;
   startAfter?: number | string;
+  orderBy?: ContactSortField;
+  orderDirection?: 'asc' | 'desc';
   campaign_status?: CampaignStatus;
   stage_count_filters?: StageCountFilterParams;
 }

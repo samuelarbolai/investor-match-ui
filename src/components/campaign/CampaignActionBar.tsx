@@ -15,7 +15,7 @@ interface CampaignActionBarProps {
   selectedCount: number;
   onAddToCampaign: () => Promise<void>;
   onRemoveFromCampaign: () => Promise<void>;
-  onChangeStage: (stage: CampaignStatus) => Promise<void>;
+  onChangeStage: (stage: CampaignStatus) => void;
   stageOptions: CampaignStatus[];
 }
 
@@ -44,9 +44,9 @@ export const CampaignActionBar = ({
     setAnchorEl(event.currentTarget);
   };
 
-  const handleStageSelect = async (stage: CampaignStatus) => {
+  const handleStageSelect = (stage: CampaignStatus) => {
     setAnchorEl(null);
-    await handleAction(() => onChangeStage(stage));
+    onChangeStage(stage);
   };
 
   return (

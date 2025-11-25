@@ -50,6 +50,7 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
   const [filters, setFilters] = useState<ContactFilterParams>({});
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(5);
+  const [cursorStack, setCursorStack] = useState<Array<string | undefined>>([undefined]);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('campaign');
@@ -134,6 +135,7 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
   );
 
   const shouldUseFilteredQuery = viewMode === 'campaign' && hasRemoteFilters;
+  const startAfterCursor = cursorStack[page];
 
   const {
     data: regularData,
@@ -143,7 +145,7 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
   } = useContacts(
     {
       limit: rowsPerPage,
-      startAfter: page * rowsPerPage,
+      startAfter: startAfterCursor,
     },
     viewMode === 'campaign' && !shouldUseFilteredQuery
   );
@@ -378,26 +380,39 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
   const handleApplyFilters = (newFilters: ContactFilterParams) => {
     setFilters(newFilters);
     setPage(0);
+    setCursorStack([undefined]);
   };
 
   const handleClearFilters = () => {
     setFilters({});
     setPage(0);
+    setCursorStack([undefined]);
   };
 
   const handleChangePage = (_event: unknown, newPage: number) => {
+    if (newPage > page) {
+      const contacts = regularData?.data ?? [];
+      const lastId = contacts.length > 0 ? contacts[contacts.length - 1].id : undefined;
+      setCursorStack((prev) => {
+        const copy = [...prev];
+        copy[newPage] = lastId;
+        return copy;
+      });
+    }
     setPage(newPage);
   };
 
   const handleChangeRowsPerPage = (event: ChangeEvent<HTMLInputElement>) => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
+    setCursorStack([undefined]);
   };
 
   const handleToggleViewMode = (_event: ChangeEvent<HTMLInputElement>, checked: boolean) => {
     setViewMode(checked ? 'matches' : 'campaign');
     setSelectedIds([]);
     setPage(0);
+    setCursorStack([undefined]);
   };
 
   if (isBaseLoading) {

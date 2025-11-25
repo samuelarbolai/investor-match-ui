@@ -43,6 +43,15 @@ import {
 import { useContacts, CONTACTS_QUERY_KEY } from '../hooks/useContacts';
 import { useContactFilters, CONTACT_FILTERS_QUERY_KEY } from '../hooks/useContactFilters';
 import { ContactFilters } from './ContactFilters';
+import type { ContactSortField } from '../types/contact.types';
+import { TableSortControl } from './TableSortControl';
+
+const SORT_OPTIONS: { value: ContactSortField; label: string }[] = [
+  { value: 'updated_at', label: 'Last updated' },
+  { value: 'created_at', label: 'Created' },
+  { value: 'full_name', label: 'Name' },
+  { value: 'contact_type', label: 'Contact Type' },
+] ;
 
 const formatStageLabel = (status: CampaignStatus) => status.replace(/_/g, ' ');
 
@@ -114,10 +123,19 @@ export const ContactsTable = () => {
   const hasActiveFilters = Object.keys(filters).length > 0;
   const [isRefreshingCounts, setIsRefreshingCounts] = useState(false);
   // Cursor-based pagination: store the startAfter (last id of previous page)
-  const [cursorStack, setCursorStack] = useState<(string | number | undefined)[]>([0]);
+  const [cursorStack, setCursorStack] = useState<Array<string | undefined>>([undefined]);
+  const [sortField, setSortField] = useState<ContactSortField>('updated_at');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   const handleOpenColumnMenu = (event: React.MouseEvent<HTMLElement>) => {
     setColumnMenuAnchor(event.currentTarget);
+  };
+
+  const handleSortChange = (field: ContactSortField, direction: 'asc' | 'desc') => {
+    setSortField(field);
+    setSortDirection(direction);
+    setPage(0);
+    setCursorStack([undefined]); // reset cursor when order changes
   };
 
   const handleCloseColumnMenu = () => setColumnMenuAnchor(null);
@@ -171,6 +189,8 @@ export const ContactsTable = () => {
     {
       limit: rowsPerPage,
       startAfter: startAfterCursor,
+      orderBy: sortField,
+      orderDirection: sortDirection,
     },
     !hasActiveFilters // Only fetch if no filters
   );
@@ -181,7 +201,12 @@ export const ContactsTable = () => {
     isError: isErrorFiltered,
     error: errorFiltered,
   } = useContactFilters(
-    { ...filters, limit: rowsPerPage, startAfter: startAfterCursor },
+    { ...filters, 
+      limit: rowsPerPage, 
+      startAfter: startAfterCursor,
+      orderBy: sortField,
+      orderDirection: sortDirection,  
+    },
     hasActiveFilters // Only fetch if filters exist
   );
 
@@ -193,13 +218,13 @@ export const ContactsTable = () => {
   const handleApplyFilters = (newFilters: ContactFilterParams) => {
     setFilters(newFilters);
     setPage(0);
-    setCursorStack([0]);
+    setCursorStack([undefined]);
   };
 
   const handleClearFilters = () => {
     setFilters({});
     setPage(0);
-    setCursorStack([0]);
+    setCursorStack([undefined]);
   };
 
   const handleChangePage = (_event: unknown, newPage: number) => {
@@ -226,7 +251,7 @@ export const ContactsTable = () => {
   const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
-    setCursorStack([0]);
+    setCursorStack([undefined]);
   };
 
   if (isLoading) {
@@ -346,6 +371,12 @@ export const ContactsTable = () => {
               <ViewColumnIcon />
             </IconButton>
           </Tooltip>
+          <TableSortControl
+            options={SORT_OPTIONS}
+            value={sortField}
+            direction={sortDirection}
+            onChange={handleSortChange}
+          />
           <ContactFilters 
             onApplyFilters={handleApplyFilters}
             onClearFilters={handleClearFilters}

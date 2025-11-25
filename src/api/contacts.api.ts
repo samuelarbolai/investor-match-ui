@@ -73,9 +73,14 @@ export const contactsApi = {
    * Filtra contactos según criterios específicos
    */
   filterContacts: async (filters: ContactFilterParams): Promise<ContactFilterResponse> => {
-    const { stage_count_filters, ...rest } = filters;
+    const { stage_count_filters, orderBy, orderDirection, ...rest } = filters;
     const stagePayload = buildStageCountFiltersPayload(stage_count_filters);
-    const payload = stagePayload ? { ...rest, stage_count_filters: stagePayload } : rest;
+    const payload = {
+      ...rest,
+      order_by: orderBy,
+      order_direction: orderDirection,
+      ...(stagePayload ? { ...rest, stage_count_filters: stagePayload } : {})
+    };
     const response = await apiClient.post<ContactFilterResponse>('/contacts/filter', payload);
     return response.data;
   },
