@@ -1,14 +1,18 @@
 import { Box, FormControl, InputLabel, MenuItem, Select, ToggleButton, ToggleButtonGroup } from '@mui/material';
-import type { ContactSortField } from '../types/contact.types';
 
-interface TableSortControlProps {
-  options: Array<{ value: ContactSortField; label: string }>;
-  value: ContactSortField;
+interface TableSortControlProps<T extends string = string> {
+  options: Array<{ value: T; label: string }>;
+  value: T;
   direction: 'asc' | 'desc';
-  onChange: (field: ContactSortField, direction: 'asc' | 'desc') => void;
+  onChange: (field: T, direction: 'asc' | 'desc') => void;
 }
 
-export const TableSortControl = ({ options, value, direction, onChange }: TableSortControlProps) => (
+export const TableSortControl = <T extends string = string>({
+  options,
+  value,
+  direction,
+  onChange,
+}: TableSortControlProps<T>) => (
   <Box display="flex" gap={2} alignItems="center">
     <FormControl size="small">
       <InputLabel id="table-sort-field">Sort by</InputLabel>
@@ -16,7 +20,7 @@ export const TableSortControl = ({ options, value, direction, onChange }: TableS
         labelId="table-sort-field"
         label="Sort by"
         value={value}
-        onChange={(event) => onChange(event.target.value as ContactSortField, direction)}
+        onChange={(event) => onChange(event.target.value as T, direction)}
       >
         {options.map((option) => (
           <MenuItem key={option.value} value={option.value}>
