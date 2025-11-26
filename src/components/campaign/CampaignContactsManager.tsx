@@ -3,11 +3,11 @@ import {
   Alert,
   Box,
   CircularProgress,
-  FormControlLabel,
   Button,
   Stack,
-  Switch,
   TablePagination,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from '@mui/material';
 import {
@@ -26,6 +26,7 @@ import type {
   ContactSortField,
   ContactsQueryParams,
   MatchCandidate,
+  CampaignContactsOrderBy,
 } from '../../types/contact.types';
 import {
   CAMPAIGN_STAGE_OPTIONS,
@@ -39,101 +40,63 @@ import { introductionsApi } from '../../api/introductions.api';
 import { useMatches } from '../../hooks/useContactDetail';
 import { useQueryClient } from '@tanstack/react-query';
 import { TableSortControl } from '../TableSortControl';
-import { contactsApi } from '../../api/contacts.api';
+import { useCampaignContacts, CAMPAIGN_CONTACTS_QUERY_KEY } from '../../hooks/useCampaignContacts';
 
-type ViewMode = 'campaign' | 'matches';
-
-interface CampaignContactsManagerProps {
-  campaignId: string;
-  contactType: 'investor' | 'founder';
-}
-
-type CampaignSortField = ContactSortField | 'pipeline';
-
-const PIPELINE_SORT_OPTION = { value: 'pipeline' as CampaignSortField, label: 'Pipeline priority' };
-
-const CONTACT_SORT_OPTIONS: { value: CampaignSortField; label: string }[] = [
-  PIPELINE_SORT_OPTION,
+const ALL_SORT_OPTIONS: { value: ContactSortField; label: string }[] = [
   { value: 'updated_at', label: 'Last updated' },
   { value: 'created_at', label: 'Created' },
   { value: 'full_name', label: 'Name' },
   { value: 'contact_type', label: 'Contact Type' },
 ];
 
-const STAGE_PRIORITY_ORDER: CampaignStatus[] = [
-  'met',
-  'to_meet',
-  'interested',
-  'qualified',
-  'outreached',
-  'prospect',
-  'disqualified',
-  'not_in_campaign',
+const CAMPAIGN_SORT_OPTIONS: { value: CampaignContactsOrderBy; label: string }[] = [
+  { value: 'stage', label: 'Stage priority' },
+  { value: 'updated_at', label: 'Recently updated' },
 ];
 
-const STAGE_RANK: Record<CampaignStatus, number> = STAGE_PRIORITY_ORDER.reduce(
-  (acc, stage, index) => {
-    acc[stage] = index;
-    return acc;
-  },
-  {} as Record<CampaignStatus, number>
-);
+type ViewMode = 'all' | 'campaign' | 'matches';
 
-const sortByPipeline = (
-  contacts: Contact[],
-  membershipMap: Record<string, CampaignStatus | null>
-): Contact[] => {
-  return [...contacts].sort((a, b) => {
-    const statusA = membershipMap[a.id] ?? 'not_in_campaign';
-    const statusB = membershipMap[b.id] ?? 'not_in_campaign';
-    return STAGE_RANK[statusA] - STAGE_RANK[statusB];
-  });
-};
+type ArrayFilterKey =
+  | 'industries'
+  | 'skills'
+  | 'roles'
+  | 'funding_stages'
+  | 'verticals'
+  | 'product_types'
+  | 'seniority_levels';
 
-const getSortValue = (contact: Contact, field: ContactSortField): string | number => {
-  switch (field) {
-    case 'full_name':
-      return contact.full_name?.toLowerCase() ?? '';
-    case 'contact_type':
-      return contact.contact_type ?? '';
-    case 'created_at':
-      return contact.created_at?._seconds ?? 0;
-    case 'updated_at':
-      return contact.updated_at?._seconds ?? 0;
-    default:
-      return '';
-  }
-};
-
-const sortContactsLocally = (
-  contacts: Contact[],
-  field: ContactSortField,
-  direction: 'asc' | 'desc'
-): Contact[] => {
-  const sorted = [...contacts].sort((a, b) => {
-    const valueA = getSortValue(a, field);
-    const valueB = getSortValue(b, field);
-    if (valueA < valueB) return -1;
-    if (valueA > valueB) return 1;
-    return 0;
-  });
-  return direction === 'asc' ? sorted : sorted.reverse();
-};
+interface CampaignContactsManagerProps {
+  campaignId: string;
+  contactType: 'investor' | 'founder';
+}
 
 export const CampaignContactsManager = ({ campaignId, contactType }: CampaignContactsManagerProps) => {
   const queryClient = useQueryClient();
+  const [viewMode, setViewMode] = useState<ViewMode>('all');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [filters, setFilters] = useState<ContactFilterParams>({});
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(5);
-  const [cursorStack, setCursorStack] = useState<Array<string | undefined>>([undefined]);
+
+  // All contacts view state
+  const [allSortField, setAllSortField] = useState<ContactSortField>('updated_at');
+  const [allSortDirection, setAllSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [allPage, setAllPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [allCursorStack, setAllCursorStack] = useState<Array<string | undefined>>([undefined]);
+
+  // Campaign view state
+  const [campaignSortField, setCampaignSortField] = useState<CampaignContactsOrderBy>('stage');
+  const [campaignSortDirection, setCampaignSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [campaignPage, setCampaignPage] = useState(0);
+  // Firestore doc IDs used to page through the campaign endpoint.
+  const [campaignCursorStack, setCampaignCursorStack] = useState<Array<string | undefined>>([undefined]);
+
+  // Matches view state
+  const [matchesPage, setMatchesPage] = useState(0);
+
   const [actionError, setActionError] = useState<string | null>(null);
   const [isActionLoading, setIsActionLoading] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>('campaign');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingStage, setPendingStage] = useState<CampaignStatus | null>(null);
-  const [sortField, setSortField] = useState<CampaignSortField>('pipeline');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   const remoteFilters = useMemo<Omit<ContactFilterParams, 'campaign_status'>>(() => {
     const { campaign_status, ...rest } = filters;
@@ -148,15 +111,6 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
       return value !== undefined && value !== null && value !== '';
     });
   }, [remoteFilters]);
-
-  type ArrayFilterKey =
-    | 'industries'
-    | 'skills'
-    | 'roles'
-    | 'funding_stages'
-    | 'verticals'
-    | 'product_types'
-    | 'seniority_levels';
 
   const matchesLocalFilter = useCallback(
     (contact: Contact) => {
@@ -212,62 +166,79 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
     [hasRemoteFilters, remoteFilters]
   );
 
-  const shouldUseFilteredQuery = viewMode === 'campaign' && hasRemoteFilters;
-  const startAfterCursor = cursorStack[page];
-
-  const baseQueryParams = useMemo<ContactsQueryParams>(() => {
-    const params: ContactsQueryParams = {
-      limit: rowsPerPage,
-      startAfter: startAfterCursor,
-    };
-    if (sortField !== 'pipeline') {
-      params.orderBy = sortField;
-      params.orderDirection = sortDirection;
-    }
-    return params;
-  }, [rowsPerPage, startAfterCursor, sortField, sortDirection]);
+  const allStartAfter = allCursorStack[allPage];
 
   const {
     data: regularData,
     isLoading: isLoadingRegular,
     isError: isErrorRegular,
     error: errorRegular,
-  } = useContacts(baseQueryParams, viewMode === 'campaign' && !shouldUseFilteredQuery);
-
-  const filterQueryParams = useMemo(() => {
-    const params: ContactFilterParams = {
-      ...remoteFilters,
+  } = useContacts(
+    {
       limit: rowsPerPage,
-    };
-    if (sortField !== 'pipeline') {
-      params.orderBy = sortField;
-      params.orderDirection = sortDirection;
-    }
-    return params;
-  }, [remoteFilters, rowsPerPage, sortField, sortDirection]);
+      startAfter: allStartAfter,
+      orderBy: allSortField,
+      orderDirection: allSortDirection,
+    },
+    viewMode === 'all' && !hasRemoteFilters
+  );
+  const regularHasMore = regularData?.pagination?.hasMore ?? false;
+
+  const { startAfter: _ignoredStartAfter, ...remoteFiltersWithoutCursor } = remoteFilters;
+
+  const filterQueryParams: ContactsQueryParams = {
+    ...remoteFiltersWithoutCursor,
+    limit: rowsPerPage,
+    orderBy: allSortField,
+    orderDirection: allSortDirection,
+  };
 
   const {
     data: filteredData,
     isLoading: isLoadingFiltered,
     isError: isErrorFiltered,
     error: errorFiltered,
-  } = useContactFilters(filterQueryParams, shouldUseFilteredQuery);
+  } = useContactFilters(filterQueryParams, viewMode === 'all' && hasRemoteFilters);
 
-  const baseContacts = useMemo<Contact[]>(() => {
-    if (shouldUseFilteredQuery) {
+  const allContacts = useMemo<Contact[]>(() => {
+    if (viewMode !== 'all') {
+      return [];
+    }
+    if (hasRemoteFilters) {
       return filteredData?.data ?? [];
     }
     return regularData?.data ?? [];
-  }, [filteredData, regularData, shouldUseFilteredQuery]);
+  }, [filteredData, hasRemoteFilters, regularData, viewMode]);
+
+  const campaignStartAfter = campaignCursorStack[campaignPage];
+  // In-campaign view pulls owner-specific introductions via backend endpoint.
+  const campaignQuery = useCampaignContacts(
+    campaignId,
+    {
+      limit: rowsPerPage,
+      startAfter: campaignStartAfter,
+      orderBy: campaignSortField,
+      orderDirection: campaignSortDirection,
+    },
+    viewMode === 'campaign'
+  );
+
+  const campaignRecords = campaignQuery.data?.data ?? [];
+  const campaignContacts = useMemo<Contact[]>(() => campaignRecords.map((record) => record.contact), [campaignRecords]);
+  const campaignNextCursor = campaignQuery.data?.pagination.nextCursor;
+  const campaignHasMore = campaignQuery.data?.pagination.hasMore ?? false;
+
+  const {
+    membershipMap: campaignMembershipMap,
+    isLoading: isMembershipLoading,
+    error: membershipError,
+    refetch: refetchMembership,
+  } = useCampaignMembership(campaignId);
 
   const matchQuery = useMatches(campaignId, contactType, 25);
   const matchCandidates = useMemo<MatchCandidate[]>(
     () => matchQuery.data?.candidates ?? [],
     [matchQuery.data]
-  );
-  const matchContacts = useMemo<Contact[]>(
-    () => matchCandidates.map((candidate) => candidate.contact),
-    [matchCandidates]
   );
   const matchMetaMap = useMemo<
     Record<string, { score: number; overlaps: MatchCandidate['overlaps'] }>
@@ -283,104 +254,8 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
       {}
     );
   }, [matchCandidates]);
-
-  const {
-    membershipMap,
-    isLoading: isMembershipLoading,
-    error: membershipError,
-    refetch: refetchMembership,
-  } = useCampaignMembership(campaignId);
-
-  const membershipIds = useMemo(() => Object.keys(membershipMap), [membershipMap]);
-  const [campaignContactCache, setCampaignContactCache] = useState<Record<string, Contact>>({});
-
-  useEffect(() => {
-    let cancelled = false;
-    if (!membershipIds.length) {
-      return;
-    }
-    const existingIds = new Set<string>([
-      ...baseContacts.map((contact) => contact.id),
-      ...matchContacts.map((contact) => contact.id),
-    ]);
-    const missing = membershipIds.filter(
-      (id) => !existingIds.has(id) && !campaignContactCache[id]
-    );
-    if (!missing.length) {
-      return;
-    }
-
-    (async () => {
-      try {
-        const results = await Promise.all(
-          missing.map(async (id) => {
-            try {
-              const contact = await contactsApi.getContactById(id);
-              return { id, contact };
-            } catch (error) {
-              console.error('[CampaignContacts] failed to load contact', id, error);
-              return null;
-            }
-          })
-        );
-        if (cancelled) {
-          return;
-        }
-        setCampaignContactCache((prev) => {
-          const next = { ...prev };
-          results.forEach((result) => {
-            if (result?.contact) {
-              next[result.id] = result.contact;
-            }
-          });
-          return next;
-        });
-      } catch (error) {
-        if (!cancelled) {
-          console.error('[CampaignContacts] failed to load campaign contacts', error);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [membershipIds, baseContacts, matchContacts, campaignContactCache]);
-
-  const membershipContacts = useMemo(() => {
-    return membershipIds
-      .map((id) => {
-        return (
-          baseContacts.find((contact) => contact.id === id) ||
-          campaignContactCache[id] ||
-          null
-        );
-      })
-      .filter((contact): contact is Contact => contact !== null);
-  }, [membershipIds, baseContacts, campaignContactCache]);
-
-  const combinedContacts = useMemo(() => {
-    const map = new Map<string, Contact>();
-    membershipContacts.forEach((contact) => map.set(contact.id, contact));
-    baseContacts.forEach((contact) => map.set(contact.id, contact));
-    return Array.from(map.values());
-  }, [membershipContacts, baseContacts]);
-
-  const campaignDataset = shouldUseFilteredQuery ? baseContacts : combinedContacts;
-
-  const campaignContacts = useMemo(() => {
-    if (!filters.campaign_status) {
-      return campaignDataset;
-    }
-
-    return campaignDataset.filter((contact) => {
-      const status = membershipMap[contact.id] ?? 'not_in_campaign';
-      return status === filters.campaign_status;
-    });
-  }, [campaignDataset, filters.campaign_status, membershipMap]);
-
-  const matchesContacts = useMemo(() => {
-    let dataset = matchContacts;
+  const matchesContacts = useMemo<Contact[]>(() => {
+    let dataset = matchCandidates.map((candidate) => candidate.contact);
 
     if (hasRemoteFilters) {
       dataset = dataset.filter(matchesLocalFilter);
@@ -388,71 +263,132 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
 
     if (filters.campaign_status) {
       dataset = dataset.filter((contact) => {
-        const status = membershipMap[contact.id] ?? 'not_in_campaign';
+        const status = campaignMembershipMap[contact.id] ?? 'not_in_campaign';
         return status === filters.campaign_status;
       });
     }
 
     return dataset;
-  }, [matchContacts, hasRemoteFilters, matchesLocalFilter, filters.campaign_status, membershipMap]);
+  }, [matchCandidates, hasRemoteFilters, matchesLocalFilter, filters.campaign_status, campaignMembershipMap]);
 
-  const contacts = viewMode === 'matches' ? matchesContacts : campaignContacts;
+  const matchesPaged = useMemo(() => {
+    const start = matchesPage * rowsPerPage;
+    return matchesContacts.slice(start, start + rowsPerPage);
+  }, [matchesContacts, matchesPage, rowsPerPage]);
 
-  const totalCount = useMemo(() => {
+  const totalCampaignContacts = useMemo(() => {
+    if (filters.campaign_status) {
+      return Object.values(campaignMembershipMap).filter((status) => status === filters.campaign_status).length;
+    }
+    return Object.keys(campaignMembershipMap).length;
+  }, [campaignMembershipMap, filters.campaign_status]);
+
+  const matchesTotalPages = Math.ceil(matchesContacts.length / rowsPerPage);
+
+  const handleApplyFilters = (newFilters: ContactFilterParams) => {
+    setFilters(newFilters);
+    setAllPage(0);
+    setCampaignPage(0);
+    setMatchesPage(0);
+    setAllCursorStack([undefined]);
+    setCampaignCursorStack([undefined]);
+  };
+
+  const handleClearFilters = () => {
+    setFilters({});
+    setAllPage(0);
+    setCampaignPage(0);
+    setMatchesPage(0);
+    setAllCursorStack([undefined]);
+    setCampaignCursorStack([undefined]);
+  };
+
+  const handleViewModeChange = (_event: React.MouseEvent<HTMLElement>, next: ViewMode | null) => {
+    if (!next) return;
+    setViewMode(next);
+    setSelectedIds([]);
+    if (next === 'campaign') {
+      setCampaignSortField('stage');
+      setCampaignSortDirection('asc');
+    }
+  };
+
+  const handleAllSortChange = (field: ContactSortField, direction: 'asc' | 'desc') => {
+    setAllSortField(field);
+    setAllSortDirection(direction);
+    setAllPage(0);
+    setAllCursorStack([undefined]);
+  };
+
+  const handleCampaignSortChange = (field: CampaignContactsOrderBy, direction: 'asc' | 'desc') => {
+    setCampaignSortField(field);
+    setCampaignSortDirection(direction);
+    setCampaignPage(0);
+    setCampaignCursorStack([undefined]);
+  };
+
+  const handleChangePage = (_event: unknown, newPage: number) => {
+    if (viewMode === 'all') {
+      if (newPage > allPage) {
+        if (!regularHasMore) {
+          return;
+        }
+        const contacts = (regularData?.data ?? []);
+        const lastId = contacts.length > 0 ? contacts[contacts.length - 1].id : undefined;
+        setAllCursorStack((prev) => {
+          const copy = [...prev];
+          copy[newPage] = lastId;
+          return copy;
+        });
+      } else if (newPage < allPage) {
+        setAllCursorStack((prev) => {
+          const copy = [...prev];
+          copy.length = Math.max(newPage + 1, 1);
+          return copy;
+        });
+      }
+      setAllPage(newPage);
+      return;
+    }
+
+    if (viewMode === 'campaign') {
+      if (newPage > campaignPage) {
+        if (!campaignHasMore || !campaignNextCursor) {
+          return;
+        }
+        setCampaignCursorStack((prev) => {
+          const copy = [...prev];
+          copy[newPage] = campaignNextCursor;
+          return copy;
+        });
+      } else if (newPage < campaignPage) {
+        setCampaignCursorStack((prev) => {
+          const copy = [...prev];
+          copy.length = Math.max(newPage + 1, 1);
+          return copy;
+        });
+      }
+      setCampaignPage(newPage);
+      return;
+    }
+
     if (viewMode === 'matches') {
-      return contacts.length;
+      if (newPage > matchesPage && newPage >= matchesTotalPages) {
+        return;
+      }
+      setMatchesPage(newPage);
     }
-    if (sortField === 'pipeline' || filters.campaign_status) {
-      return campaignContacts.length;
-    }
-    if (shouldUseFilteredQuery) {
-      return filteredData?.total ?? campaignContacts.length;
-    }
-    return regularData?.pagination?.total ?? campaignContacts.length;
-  }, [
-    campaignContacts.length,
-    contacts.length,
-    filteredData?.total,
-    filters.campaign_status,
-    regularData?.pagination?.total,
-    shouldUseFilteredQuery,
-    sortField,
-    viewMode,
-  ]);
+  };
 
-  const isBaseLoading =
-    viewMode === 'matches'
-      ? matchQuery.isLoading
-      : shouldUseFilteredQuery
-      ? isLoadingFiltered
-      : isLoadingRegular;
-  const isBaseError =
-    viewMode === 'matches'
-      ? matchQuery.isError
-      : shouldUseFilteredQuery
-      ? isErrorFiltered
-      : isErrorRegular;
-  const baseError =
-    viewMode === 'matches'
-      ? matchQuery.error
-      : shouldUseFilteredQuery
-      ? errorFiltered
-      : errorRegular;
-
-  const orderedContacts = useMemo(() => {
-    if (sortField === 'pipeline') {
-      return sortByPipeline(contacts, membershipMap);
-    }
-    if (viewMode === 'matches') {
-      return sortContactsLocally(contacts, sortField, sortDirection);
-    }
-    return contacts;
-  }, [contacts, membershipMap, sortDirection, sortField, viewMode]);
-
-  const displayedContacts = useMemo(() => {
-    const start = page * rowsPerPage;
-    return orderedContacts.slice(start, start + rowsPerPage);
-  }, [orderedContacts, page, rowsPerPage]);
+  const handleChangeRowsPerPage = (event: ChangeEvent<HTMLInputElement>) => {
+    const nextRows = parseInt(event.target.value, 10);
+    setRowsPerPage(nextRows);
+    setAllPage(0);
+    setCampaignPage(0);
+    setMatchesPage(0);
+    setAllCursorStack([undefined]);
+    setCampaignCursorStack([undefined]);
+  };
 
   const handleToggleSelect = (id: string) => {
     setSelectedIds((prev) =>
@@ -460,50 +396,112 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
     );
   };
 
-  const handleToggleSelectAll = () => {
-    if (displayedContacts.every((contact) => selectedIds.includes(contact.id))) {
-      setSelectedIds((prev) => prev.filter((id) => !displayedContacts.some((c) => c.id === id)));
+  const handleToggleSelectAll = (contacts: Contact[]) => {
+    if (contacts.every((contact) => selectedIds.includes(contact.id))) {
+      setSelectedIds((prev) => prev.filter((id) => !contacts.some((c) => c.id === id)));
     } else {
       setSelectedIds((prev) => {
-        const idsToAdd = displayedContacts
-          .map((contact) => contact.id)
-          .filter((id) => !prev.includes(id));
+        const idsToAdd = contacts.map((contact) => contact.id).filter((id) => !prev.includes(id));
         return [...prev, ...idsToAdd];
       });
     }
   };
 
-  useEffect(() => {
-    setSelectedIds((prev) =>
-      prev.filter((id) => displayedContacts.some((contact) => contact.id === id))
-    );
-    setPage((prevPage) => {
-      const maxPage = Math.max(0, Math.ceil(totalCount / rowsPerPage) - 1);
-      return Math.min(prevPage, maxPage);
-    });
-  }, [displayedContacts, rowsPerPage, totalCount]);
+  const handleToggleSelectAllWrapper = (contacts: Contact[]) => () => handleToggleSelectAll(contacts);
 
-  const currentStageCounts = useMemo(() => {
-    return displayedContacts.reduce<Record<CampaignStatus, number>>(
-      (acc, contact) => {
-        const status = membershipMap[contact.id] ?? 'not_in_campaign';
-        acc[status] += 1;
-        return acc;
-      },
-      {
-        prospect: 0,
-        qualified: 0,
-        outreached: 0,
-        interested: 0,
-        to_meet: 0,
-        met: 0,
-        disqualified: 0,
-        not_in_campaign: 0,
+  const displayedContacts = useMemo(() => {
+    if (viewMode === 'all') {
+      return allContacts;
+    }
+    if (viewMode === 'campaign') {
+      if (!filters.campaign_status) {
+        return campaignContacts;
       }
-    );
-  }, [displayedContacts, membershipMap]);
+      return campaignContacts.filter((contact) => {
+        const status = campaignMembershipMap[contact.id] ?? 'not_in_campaign';
+        return status === filters.campaign_status;
+      });
+    }
+    return matchesPaged;
+  }, [allContacts, campaignContacts, campaignMembershipMap, filters.campaign_status, matchesPaged, viewMode]);
 
-  const runStageUpdate = async (stage: CampaignStatus) => {
+  useEffect(() => {
+    setSelectedIds((prev) => prev.filter((id) => displayedContacts.some((contact) => contact.id === id)));
+  }, [displayedContacts]);
+
+  const totalCount = useMemo(() => {
+    if (viewMode === 'all') {
+      if (hasRemoteFilters) {
+        return filteredData?.total ?? allContacts.length;
+      }
+      const base = allPage * rowsPerPage + allContacts.length;
+      return regularHasMore ? base + rowsPerPage : base;
+    }
+    if (viewMode === 'campaign') {
+      const base = campaignPage * rowsPerPage + campaignContacts.length;
+      return campaignHasMore ? base + rowsPerPage : base;
+    }
+    return matchesContacts.length;
+  }, [
+    allContacts.length,
+    allPage,
+    campaignContacts.length,
+    campaignHasMore,
+    campaignPage,
+    filteredData?.total,
+    hasRemoteFilters,
+    matchesContacts.length,
+    regularHasMore,
+    rowsPerPage,
+    viewMode,
+  ]);
+
+  const isLoading =
+    viewMode === 'all'
+      ? hasRemoteFilters
+        ? isLoadingFiltered
+        : isLoadingRegular
+      : viewMode === 'campaign'
+      ? campaignQuery.isLoading
+      : matchQuery.isLoading;
+
+  const isError =
+    viewMode === 'all'
+      ? hasRemoteFilters
+        ? isErrorFiltered
+        : isErrorRegular
+      : viewMode === 'campaign'
+      ? Boolean(campaignQuery.error)
+      : matchQuery.isError;
+
+  const errorMessage =
+    viewMode === 'all'
+      ? (hasRemoteFilters ? errorFiltered : errorRegular)?.message
+      : viewMode === 'campaign'
+      ? campaignQuery.error?.message
+      : matchQuery.error?.message;
+
+  const handleAddToCampaign = () => runStageUpdate('prospect');
+
+  const handleRemoveFromCampaign = () => runStageUpdate('not_in_campaign');
+
+  const handleChangeStage = (stage: CampaignStatus) => {
+    setPendingStage(stage);
+    setConfirmOpen(true);
+  };
+
+  const handleConfirmYes = () => {
+    if (!pendingStage) return;
+    runStageUpdate(pendingStage);
+    setConfirmOpen(false);
+  };
+
+  const handleConfirmNo = () => {
+    setPendingStage(null);
+    setConfirmOpen(false);
+  };
+
+  async function runStageUpdate(stage: CampaignStatus) {
     if (!selectedIds.length) {
       return;
     }
@@ -518,9 +516,13 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
           stage: toApiCampaignStage(stage),
         }))
       );
-      await refetchMembership();
-      queryClient.invalidateQueries({ queryKey: [CONTACTS_QUERY_KEY] });
-      queryClient.invalidateQueries({ queryKey: [CONTACT_FILTERS_QUERY_KEY] });
+      await Promise.all([
+        refetchMembership(),
+        queryClient.invalidateQueries({ queryKey: [CONTACTS_QUERY_KEY] }),
+        queryClient.invalidateQueries({ queryKey: [CONTACT_FILTERS_QUERY_KEY] }),
+        // Refresh the dedicated campaign contacts view as well
+        queryClient.invalidateQueries({ queryKey: [CAMPAIGN_CONTACTS_QUERY_KEY] }),
+      ]);
       setSelectedIds([]);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to update campaign stages';
@@ -529,82 +531,29 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
     } finally {
       setIsActionLoading(false);
     }
-  };
+  }
 
-  const handleAddToCampaign = () => runStageUpdate('prospect');
-  const handleRemoveFromCampaign = () => runStageUpdate('not_in_campaign');
-  const handleChangeStage = (stage: CampaignStatus) => {
-    if (!selectedIds.length) return;
-    setPendingStage(stage);
-    setConfirmOpen(true);
-  };
+  const currentStageCounts = useMemo(() => {
+    return displayedContacts.reduce<Record<CampaignStatus, number>>(
+      (acc, contact) => {
+        const status = campaignMembershipMap[contact.id] ?? 'not_in_campaign';
+        acc[status] += 1;
+        return acc;
+      },
+      {
+        prospect: 0,
+        qualified: 0,
+        outreached: 0,
+        interested: 0,
+        to_meet: 0,
+        met: 0,
+        disqualified: 0,
+        not_in_campaign: 0,
+      }
+    );
+  }, [campaignMembershipMap, displayedContacts]);
 
-  const handleConfirmNo = () => {
-    setConfirmOpen(false);
-    setPendingStage(null);
-  };
-
-  const handleConfirmYes = async () => {
-    if (!pendingStage) return;
-    setConfirmOpen(false);
-    await runStageUpdate(pendingStage);
-    setPendingStage(null);
-  };
-
-  const handleApplyFilters = (newFilters: ContactFilterParams) => {
-    setFilters(newFilters);
-    setPage(0);
-    setCursorStack([undefined]);
-  };
-
-  const handleClearFilters = () => {
-    setFilters({});
-    setPage(0);
-    setCursorStack([undefined]);
-  };
-
-  const handleChangePage = (_event: unknown, newPage: number) => {
-    if (viewMode === 'matches') {
-      setPage(newPage);
-      return;
-    }
-    if (newPage > page) {
-      const contacts = regularData?.data ?? [];
-      const lastId = contacts.length > 0 ? contacts[contacts.length - 1].id : undefined;
-      setCursorStack((prev) => {
-        const copy = [...prev];
-        copy[newPage] = lastId;
-        return copy;
-      });
-    }
-    setPage(newPage);
-  };
-
-  const handleChangeRowsPerPage = (event: ChangeEvent<HTMLInputElement>) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
-    setCursorStack([undefined]);
-  };
-
-  const handleToggleViewMode = (_event: ChangeEvent<HTMLInputElement>, checked: boolean) => {
-    setViewMode(checked ? 'matches' : 'campaign');
-    setSelectedIds([]);
-    setPage(0);
-    setCursorStack([undefined]);
-    if (checked) {
-      setSortField('pipeline');
-      setSortDirection('desc');
-    }
-  };
-
-  const handleSortChange = (field: CampaignSortField, direction: 'asc' | 'desc') => {
-    setSortField(field);
-    setSortDirection(direction);
-    setPage(0);
-    setCursorStack([undefined]);
-  };
-
-  if (isBaseLoading) {
+  if (isLoading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="300px">
         <CircularProgress />
@@ -612,10 +561,10 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
     );
   }
 
-  if (isBaseError) {
+  if (isError) {
     return (
       <Alert severity="error">
-        Error loading contacts: {baseError?.message || 'Unknown error'}
+        Error loading contacts: {errorMessage || 'Unknown error'}
       </Alert>
     );
   }
@@ -630,34 +579,15 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
 
   return (
     <Box>
-      <Stack spacing={2} mb={3}>
-        <Box
-          display="flex"
-          justifyContent="space-between"
-          alignItems={{ xs: 'flex-start', md: 'center' }}
-          flexDirection={{ xs: 'column', md: 'row' }}
-          gap={2}
-        >
-          <Stack spacing={1}>
-            <Typography variant="h5" fontWeight={700}>
-              Campaign & Matches Manager
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Use the slider to switch between campaign contacts and match suggestions while keeping the same bulk actions.
-            </Typography>
-          </Stack>
-
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center">
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={viewMode === 'matches'}
-                  onChange={handleToggleViewMode}
-                  inputProps={{ 'aria-label': 'Toggle matches view' }}
-                />
-              }
-              label="Matches view"
-            />
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} justifyContent="space-between" alignItems={{ xs: 'flex-start', md: 'center' }} mb={2}>
+        {/* View selector (All contacts vs In Campaign vs Matches) */}
+        <ToggleButtonGroup value={viewMode} exclusive onChange={handleViewModeChange} color="primary">
+          <ToggleButton value="all">All Contacts</ToggleButton>
+          <ToggleButton value="campaign">In Campaign</ToggleButton>
+          <ToggleButton value="matches">Matches</ToggleButton>
+        </ToggleButtonGroup>
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ xs: 'flex-start', md: 'center' }}>
+          {viewMode === 'all' && (
             <ContactFilters
               onApplyFilters={handleApplyFilters}
               onClearFilters={handleClearFilters}
@@ -665,14 +595,24 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
               showCampaignFilters
               campaignStatusValues={CAMPAIGN_STAGE_OPTIONS}
             />
-            <TableSortControl<CampaignSortField>
-              options={CONTACT_SORT_OPTIONS}
-              value={sortField}
-              direction={sortDirection}
-              onChange={handleSortChange}
+          )}
+          {viewMode === 'campaign' && (
+            <TableSortControl<CampaignContactsOrderBy>
+              options={CAMPAIGN_SORT_OPTIONS}
+              value={campaignSortField}
+              direction={campaignSortDirection}
+              onChange={handleCampaignSortChange}
             />
-          </Stack>
-        </Box>
+          )}
+          {viewMode === 'all' && (
+            <TableSortControl
+              options={ALL_SORT_OPTIONS}
+              value={allSortField}
+              direction={allSortDirection}
+              onChange={handleAllSortChange}
+            />
+          )}
+        </Stack>
       </Stack>
 
       <Stack spacing={2} mb={2}>
@@ -690,7 +630,9 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
           disabled={isActionLoading || isMembershipLoading}
         />
         <Typography variant="caption" color="text.secondary">
-          Stage distribution ({viewMode === 'matches' ? 'matches' : 'campaign'} view):{' '}
+          Stage distribution (
+          {viewMode === 'all' ? 'all contacts' : viewMode === 'campaign' ? 'in campaign' : 'matches'} view):
+          {' '}
           {JSON.stringify(currentStageCounts)}
         </Typography>
       </Stack>
@@ -699,18 +641,17 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
         contacts={displayedContacts}
         selectedIds={selectedIds}
         onToggleSelect={handleToggleSelect}
-        onToggleSelectAll={handleToggleSelectAll}
-        campaignMembershipMap={membershipMap}
-        mode={viewMode}
+        onToggleSelectAll={handleToggleSelectAllWrapper(displayedContacts)}
+        campaignMembershipMap={campaignMembershipMap}
+        mode={viewMode === 'matches' ? 'matches' : 'campaign'}
         matchMetaMap={matchMetaMap}
       />
 
-      {/* Confirmation dialog before changing stage */}
       <Dialog open={confirmOpen} onClose={handleConfirmNo} fullWidth maxWidth="sm">
         <DialogTitle>Confirm Stage Change</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            This action will trigger a message to the user showing him the new prospects, are you ok with that?
+            This action will trigger a message to the user showing the updated prospects. Continue?
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 2, py: 1 }}>
@@ -726,7 +667,7 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
       <TablePagination
         component="div"
         count={totalCount}
-        page={page}
+        page={viewMode === 'all' ? allPage : viewMode === 'campaign' ? campaignPage : matchesPage}
         onPageChange={handleChangePage}
         rowsPerPage={rowsPerPage}
         onRowsPerPageChange={handleChangeRowsPerPage}

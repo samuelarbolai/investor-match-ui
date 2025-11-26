@@ -1,5 +1,10 @@
 import type { CampaignStageApi, CampaignStatus } from './campaign.types';
 
+export interface FirestoreTimestamp {
+  _seconds: number;
+  _nanoseconds: number;
+}
+
 export interface Contact {
   id: string;
   full_name: string;
@@ -37,14 +42,8 @@ export interface Contact {
   risk_tolerance_preferences: string[];
   linkedin_url: string | null;
   email: string;
-  created_at: {
-    _seconds: number;
-    _nanoseconds: number;
-  };
-  updated_at: {
-    _seconds: number;
-    _nanoseconds: number;
-  };
+  created_at: FirestoreTimestamp;
+  updated_at: FirestoreTimestamp;
   stage_counts?: Partial<Record<CampaignStageApi, number>>;
 }
 
@@ -130,4 +129,32 @@ export interface MatchesResponse {
   totalMatches: number;
   seedContact: Contact;
   attributes_used: string[];
+}
+
+export type CampaignContactsOrderBy = 'stage' | 'updated_at';
+
+export interface CampaignContactRecord {
+  contact: Contact;
+  campaign_stage: CampaignStageApi;
+  introduced_at: FirestoreTimestamp;
+  updated_at: FirestoreTimestamp;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CampaignContactsPagination {
+  limit: number;
+  hasMore: boolean;
+  nextCursor?: string;
+}
+
+export interface CampaignContactsResponse {
+  data: CampaignContactRecord[];
+  pagination: CampaignContactsPagination;
+}
+
+export interface CampaignContactsQuery {
+  limit?: number;
+  startAfter?: string;
+  orderBy?: CampaignContactsOrderBy;
+  orderDirection?: 'asc' | 'desc';
 }
