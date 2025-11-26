@@ -15,10 +15,10 @@ export type CampaignStageApi =
   | 'qualified'
   | 'outreached'
   | 'interested'
-  | 'to_meet'
+  | 'to-meet'
   | 'met'
   | 'disqualified'
-  | 'not_in_campaign';
+  | 'not-in-campaign';
 
 export type CampaignMembershipMap = Record<string, CampaignStatus | null>;
 
@@ -46,13 +46,12 @@ const UI_TO_API_STAGE_MAP: Record<CampaignStatus, CampaignStageApi> = {
 
 const API_TO_UI_STAGE_MAP: Record<CampaignStageApi, CampaignStatus> = {
   prospect: 'prospect',
-  prospect: 'prospect',
   qualified: 'qualified',
   outreached: 'outreached',
   interested: 'interested',
   'to-meet': 'to_meet',
   met: 'met',
-  'disqualified': 'disqualified',
+  disqualified: 'disqualified',
   'not-in-campaign': 'not_in_campaign',
 };
 

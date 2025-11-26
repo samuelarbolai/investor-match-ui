@@ -18,11 +18,13 @@ import type { CampaignMembershipMap, CampaignStatus } from '../../types/campaign
 
 const STATUS_COLOR_MAP: Record<CampaignStatus, 'default' | 'primary' | 'secondary' | 'success' | 'warning' | 'error'> = {
   prospect: 'primary',
-  lead: 'secondary',
+  qualified: 'secondary',
+  outreached: 'default',
+  interested: 'warning',
   to_meet: 'warning',
   met: 'success',
-  not_in_campaign: 'default',
   disqualified: 'error',
+  not_in_campaign: 'default',
 };
 
 interface CampaignContactsTableProps {

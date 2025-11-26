@@ -320,11 +320,13 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
       },
       {
         prospect: 0,
-        lead: 0,
+        qualified: 0,
+        outreached: 0,
+        interested: 0,
         to_meet: 0,
         met: 0,
-        not_in_campaign: 0,
         disqualified: 0,
+        not_in_campaign: 0,
       }
     );
   }, [displayedContacts, membershipMap]);
