@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { MainLayout } from './layouts/MainLayout';
 import { ContactsPage } from './pages/ContactsPage';
 import { ContactDetailPage } from './pages/ContactDetailPage';
+import { PromptEditorPage } from './pages/PromptEditorPage';
 
 // Crear instancia de QueryClient
 const queryClient = new QueryClient({
@@ -77,6 +78,7 @@ function App() {
             <Routes>
               <Route path="/" element={<ContactsPage />} />
               <Route path="/contact/:contactId" element={<ContactDetailPage />} />
+              <Route path="/prompts" element={<PromptEditorPage />} />
             </Routes>
           </MainLayout>
         </BrowserRouter>

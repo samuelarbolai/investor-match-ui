@@ -10,6 +10,8 @@ import {
   Divider,
 } from "@mui/material";
 import PeopleIcon from "@mui/icons-material/People";
+import EditNoteIcon from "@mui/icons-material/EditNote";
+import { useLocation, useNavigate } from "react-router-dom";
 
 export const DRAWER_WIDTH = 260;
 
@@ -19,11 +21,18 @@ interface SidebarProps {
 }
 
 export const Sidebar = ({ open, onClose }: SidebarProps) => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const menuItems = [
     {
       text: "Contacts",
       icon: <PeopleIcon />,
       path: "/",
+    },
+    {
+      text: "Prompt Editor",
+      icon: <EditNoteIcon />,
+      path: "/prompts",
     },
   ];
 
@@ -73,10 +82,12 @@ export const Sidebar = ({ open, onClose }: SidebarProps) => {
       </Toolbar>
       <Divider />
       <List sx={{ px: 1, pt: 2 }}>
-        {menuItems.map((item) => (
+        {menuItems.map((item) => {
+          const selected = location.pathname === item.path || (item.path !== "/" && location.pathname.startsWith(item.path));
+          return (
           <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
             <ListItemButton
-              selected
+              selected={selected}
               sx={{
                 borderRadius: 2,
                 "&.Mui-selected": {
@@ -89,6 +100,10 @@ export const Sidebar = ({ open, onClose }: SidebarProps) => {
                     color: "primary.contrastText",
                   },
                 },
+              }}
+              onClick={() => {
+                navigate(item.path);
+                onClose();
               }}
             >
               <ListItemIcon
@@ -106,7 +121,7 @@ export const Sidebar = ({ open, onClose }: SidebarProps) => {
               />
             </ListItemButton>
           </ListItem>
-        ))}
+        )})}
       </List>
     </Box>
   );

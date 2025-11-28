@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Box,
   AppBar,
@@ -16,6 +17,8 @@ interface MainLayoutProps {
 
 export const MainLayout = ({ children }: MainLayoutProps) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const location = useLocation();
+  const isFullBleed = location.pathname.startsWith('/prompts');
 
   const toggleDrawer = () => setDrawerOpen((prev) => !prev);
 
@@ -61,7 +64,7 @@ export const MainLayout = ({ children }: MainLayoutProps) => {
         component="main"
         sx={{
           flexGrow: 1,
-          p: 3,
+          p: isFullBleed ? 0 : 3,
           ml: 0,
           transition: 'margin 0.3s ease',
           minHeight: '100vh',
