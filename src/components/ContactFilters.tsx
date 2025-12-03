@@ -18,6 +18,7 @@ import {
   RadioGroup,
   FormControlLabel,
   Radio,
+  Checkbox,
 } from '@mui/material';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -59,6 +60,7 @@ const VERTICALS = ['b2b', 'b2c', 'b2b2c'];
 const PRODUCT_TYPES = ['saas', 'marketplace', 'platform', 'hardware', 'ai_platform'];
 
 const SENIORITY_LEVELS = ['junior', 'mid', 'senior', 'executive', 'c-level'];
+const TAG_OPTIONS = ['coverage', 'test'];
 
 export const ContactFilters = ({ 
   onApplyFilters, 
@@ -68,7 +70,11 @@ export const ContactFilters = ({
   campaignStatusValues = CAMPAIGN_STAGE_OPTIONS
 }: ContactFiltersProps) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [localFilters, setLocalFilters] = useState<ContactFilterParams>(currentFilters);
+  const [localFilters, setLocalFilters] = useState<ContactFilterParams>({
+    ...currentFilters,
+    exclude_tags: currentFilters.exclude_tags ?? ['coverage'],
+    tags: currentFilters.tags ?? [],
+  });
   const selectedCampaignStatus = localFilters.campaign_status ?? 'any';
   const stageCountFilters = localFilters.stage_count_filters ?? {};
 
@@ -105,7 +111,11 @@ export const ContactFilters = ({
   };
 
   useEffect(() => {
-    setLocalFilters(currentFilters);
+    setLocalFilters({
+      ...currentFilters,
+      exclude_tags: currentFilters.exclude_tags ?? ['coverage'],
+      tags: currentFilters.tags ?? [],
+    });
   }, [currentFilters]);
 
   const handleOpenDrawer = () => setDrawerOpen(true);
@@ -117,12 +127,22 @@ export const ContactFilters = ({
   };
 
   const handleClear = () => {
-    setLocalFilters({});
+    const resetFilters: ContactFilterParams = { exclude_tags: ['coverage'], tags: [] };
+    setLocalFilters(resetFilters);
     onClearFilters();
     handleCloseDrawer();
   };
 
   const baseFilterCount = Object.entries(currentFilters).reduce((count, [key, value]) => {
+    if (key === 'tags') {
+      const tags = Array.isArray(value) ? value : [];
+      return tags.length > 0 ? count + 1 : count;
+    }
+    if (key === 'exclude_tags') {
+      const excludeTags = Array.isArray(value) ? value : [];
+      const isDefault = excludeTags.length === 1 && excludeTags[0] === 'coverage';
+      return !isDefault && excludeTags.length > 0 ? count + 1 : count;
+    }
     if (key === 'stage_count_filters') {
       return count;
     }
@@ -177,6 +197,58 @@ export const ContactFilters = ({
 
           {/* Filters Form */}
           <Stack spacing={3}>
+            <Autocomplete
+              multiple
+              freeSolo
+              options={TAG_OPTIONS}
+              value={localFilters.tags ?? []}
+              onChange={(_, newValue) => {
+                setLocalFilters({
+                  ...localFilters,
+                  tags: newValue,
+                });
+              }}
+              renderInput={(params) => (
+                <TextField {...params} label="Tags" placeholder="coverage, test" />
+              )}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => (
+                  <Chip
+                    label={option}
+                    size="small"
+                    {...getTagProps({ index })}
+                    key={option}
+                  />
+                ))
+              }
+            />
+
+            <Autocomplete
+              multiple
+              freeSolo
+              options={TAG_OPTIONS}
+              value={localFilters.exclude_tags ?? ['coverage']}
+              onChange={(_, newValue) => {
+                setLocalFilters({
+                  ...localFilters,
+                  exclude_tags: newValue.length ? newValue : ['coverage'],
+                });
+              }}
+              renderInput={(params) => (
+                <TextField {...params} label="Exclude tags" placeholder="coverage, test" />
+              )}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => (
+                  <Chip
+                    label={option}
+                    size="small"
+                    {...getTagProps({ index })}
+                    key={option}
+                  />
+                ))
+              }
+            />
+
             {showCampaignFilters && (
               <Box>
                 <Typography variant="subtitle2" fontWeight={600} gutterBottom>

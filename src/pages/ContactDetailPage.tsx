@@ -40,11 +40,21 @@ export const ContactDetailPage = () => {
     );
   }
 
+  const renderErrorMessage = () => {
+    const maybeAxios = error as any;
+    const status = maybeAxios?.response?.status;
+    const data = maybeAxios?.response?.data;
+    if (status === 400 && data?.error === 'Validation failed') {
+      return 'Contact not available (backend rejected this id — likely a coverage/test record). Choose another contact or disable coverage exclusion.';
+    }
+    return error?.message || 'Contact not found';
+  };
+
   if (isError || !contact) {
     return (
       <Box p={3}>
         <Alert severity="error">
-          Error loading contact: {error?.message || 'Contact not found'}
+          Error loading contact: {renderErrorMessage()}
         </Alert>
       </Box>
     );

@@ -116,11 +116,10 @@ export const ContactsTable = () => {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [filters, setFilters] = useState<ContactFilterParams>({});
+  const [filters, setFilters] = useState<ContactFilterParams>({ exclude_tags: ['coverage'], tags: [] });
   const [columnVisibility, setColumnVisibility] =
     useState<Record<TableColumnKey, boolean>>(DEFAULT_COLUMN_VISIBILITY);
   const [columnMenuAnchor, setColumnMenuAnchor] = useState<null | HTMLElement>(null);
-  const hasActiveFilters = Object.keys(filters).length > 0;
   const [isRefreshingCounts, setIsRefreshingCounts] = useState(false);
   // Cursor-based pagination: store the startAfter (last id of previous page)
   const [cursorStack, setCursorStack] = useState<Array<string | undefined>>([undefined]);
@@ -165,6 +164,21 @@ export const ContactsTable = () => {
     { key: 'fundingStages', label: 'Funding Stages' },
   ];
 
+  const effectiveTags = filters.tags ?? [];
+  const hasTagsFilter = effectiveTags.length > 0;
+  const hasNonTagFilters = Object.entries(filters).some(([key, value]) => {
+    if (key === 'tags' || key === 'exclude_tags') return false;
+    if (key === 'stage_count_filters') {
+      return Object.values(filters.stage_count_filters ?? {}).some(
+        (range) => range && (range.min !== undefined || range.max !== undefined)
+      );
+    }
+    if (Array.isArray(value)) return value.length > 0;
+    return value !== undefined && value !== null && value !== '';
+  });
+  const shouldUseFilterEndpoint = hasTagsFilter || hasNonTagFilters;
+  const hasActiveFilters = hasTagsFilter || hasNonTagFilters || Boolean(filters.exclude_tags && filters.exclude_tags.length);
+
   const handleRefreshCounts = async () => {
     try {
       setIsRefreshingCounts(true);
@@ -191,8 +205,10 @@ export const ContactsTable = () => {
       startAfter: startAfterCursor,
       orderBy: sortField,
       orderDirection: sortDirection,
+      tags: effectiveTags,
+      exclude_tags: filters.exclude_tags,
     },
-    !hasActiveFilters // Only fetch if no filters
+    !shouldUseFilterEndpoint // Use list endpoint when only tag filters are absent
   );
 
   const {
@@ -207,22 +223,26 @@ export const ContactsTable = () => {
       orderBy: sortField,
       orderDirection: sortDirection,  
     },
-    hasActiveFilters // Only fetch if filters exist
+    shouldUseFilterEndpoint // Only fetch if non-tag filters exist
   );
 
-  const isLoading = hasActiveFilters ? isLoadingFiltered : isLoadingRegular;
-  const isError = hasActiveFilters ? isErrorFiltered : isErrorRegular;
-  const error = hasActiveFilters ? errorFiltered : errorRegular;
-  const data = hasActiveFilters ? filteredData : regularData;
+  const isLoading = shouldUseFilterEndpoint ? isLoadingFiltered : isLoadingRegular;
+  const isError = shouldUseFilterEndpoint ? isErrorFiltered : isErrorRegular;
+  const error = shouldUseFilterEndpoint ? errorFiltered : errorRegular;
+  const data = shouldUseFilterEndpoint ? filteredData : regularData;
 
   const handleApplyFilters = (newFilters: ContactFilterParams) => {
-    setFilters(newFilters);
+    setFilters({
+      ...newFilters,
+      exclude_tags: newFilters.exclude_tags ?? ['coverage'],
+      tags: newFilters.tags ?? [],
+    });
     setPage(0);
     setCursorStack([undefined]);
   };
 
   const handleClearFilters = () => {
-    setFilters({});
+    setFilters({ exclude_tags: ['coverage'], tags: [] });
     setPage(0);
     setCursorStack([undefined]);
   };
@@ -233,7 +253,7 @@ export const ContactsTable = () => {
 
   const handleNextPage = () => {
     // Use last contact id of current page as cursor.
-    const contacts = (hasActiveFilters ? filteredData?.data : regularData?.data) || [];
+    const contacts = (shouldUseFilterEndpoint ? filteredData?.data : regularData?.data) || [];
     const lastId = contacts.length > 0 ? contacts[contacts.length - 1].id : undefined;
     setCursorStack((prev) => {
       const copy = [...prev];
@@ -278,6 +298,7 @@ export const ContactsTable = () => {
   }
 
   const contacts = data?.data || [];
+  const visibleContacts = contacts;
   const _extractPlatformCategory = (id: string): string => {
     const parts = id.split('_');
     if (parts.length === 0) return id;
@@ -418,6 +439,34 @@ export const ContactsTable = () => {
       {hasActiveFilters && (
         <Box mb={2}>
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            {(hasTagsFilter) && (
+              <Chip
+                label={
+                  (filters.tags && filters.tags.length)
+                    ? `Tags: ${filters.tags.join(', ')}`
+                    : 'Tags: none'
+                }
+                onDelete={() => {
+                  setFilters({ ...filters, tags: [] });
+                  setPage(0);
+                  setCursorStack([undefined]);
+                }}
+                color="primary"
+                size="small"
+              />
+            )}
+            {filters.exclude_tags && (
+              <Chip
+                label={`Exclude: ${filters.exclude_tags.join(', ')}`}
+                onDelete={() => {
+                  setFilters({ ...filters, exclude_tags: ['coverage'] });
+                  setPage(0);
+                  setCursorStack([undefined]);
+                }}
+                color="primary"
+                size="small"
+              />
+            )}
             {filters.contact_type && (
               <Chip
                 label={`Type: ${filters.contact_type}`}
@@ -599,7 +648,7 @@ export const ContactsTable = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {contacts.map((contact: Contact) => {
+              {visibleContacts.map((contact: Contact) => {
                 const stageCounts = mergeStageCounts(contact.stage_counts);
                 return (
                   <TableRow

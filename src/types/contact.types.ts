@@ -11,6 +11,7 @@ export interface Contact {
   headline: string;
   contact_type: 'investor' | 'founder';
   action_status?: 'action_required' | 'waiting';
+  tags?: string[];
   distribution_capability_ids?: string[];
   distribution_capability_labels?: string[];
   distribution_quality_bucket_ids?: string[]; // e.g. socialmedia_quality_7
@@ -66,6 +67,8 @@ export interface ContactsQueryParams {
   startAfter?: string;
   orderBy?: ContactSortField;
   orderDirection?: 'asc' | 'desc';
+  tags?: string[];
+  exclude_tags?: string[];
 }
 
 export interface ContactFilterParams {
@@ -86,6 +89,8 @@ export interface ContactFilterParams {
   orderDirection?: 'asc' | 'desc';
   campaign_status?: CampaignStatus;
   stage_count_filters?: StageCountFilterParams;
+  tags?: string[];
+  exclude_tags?: string[];
 }
 
 export interface ContactFilterResponse {
@@ -157,4 +162,6 @@ export interface CampaignContactsQuery {
   startAfter?: string;
   orderBy?: CampaignContactsOrderBy;
   orderDirection?: 'asc' | 'desc';
+  tags?: string[];
+  exclude_tags?: string[];
 }

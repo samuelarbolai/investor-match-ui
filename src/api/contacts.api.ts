@@ -49,6 +49,8 @@ export const contactsApi = {
     startAfter,
     orderBy,
     orderDirection = 'asc',
+    tags,
+    exclude_tags,
   }: ContactsQueryParams = {}): Promise<ContactsResponse> => {
     const response = await apiClient.get<ContactsResponse>('/contacts', {
       params: {
@@ -56,6 +58,8 @@ export const contactsApi = {
         startAfter,
         order_by: orderBy,
         order_direction: orderDirection,
+        tags: tags && tags.length ? tags.join(',') : undefined,
+        exclude_tags,
       },
     });
     return response.data;
@@ -73,13 +77,15 @@ export const contactsApi = {
    * Filtra contactos según criterios específicos
    */
   filterContacts: async (filters: ContactFilterParams): Promise<ContactFilterResponse> => {
-    const { stage_count_filters, orderBy, orderDirection, ...rest } = filters;
+    const { stage_count_filters, orderBy, orderDirection, tags, exclude_tags, ...rest } = filters;
     const stagePayload = buildStageCountFiltersPayload(stage_count_filters);
     const payload = {
       ...rest,
       order_by: orderBy,
       order_direction: orderDirection,
-      ...(stagePayload ? { ...rest, stage_count_filters: stagePayload } : {})
+      ...(stagePayload ? { stage_count_filters: stagePayload } : {}),
+      ...(tags && tags.length ? { tags } : {}),
+      ...(exclude_tags && exclude_tags.length ? { exclude_tags } : {}),
     };
     const response = await apiClient.post<ContactFilterResponse>('/contacts/filter', payload);
     return response.data;
@@ -105,11 +111,20 @@ export const contactsApi = {
   getMatches: async (
     contactId: string,
     type: 'investor' | 'founder',
-    limit: number = 10
+    limit: number = 10,
+    tags?: string[],
+    exclude_tags?: string[]
   ): Promise<MatchesResponse> => {
     const response = await apiClient.get<MatchesResponse>(
       `/contacts/${contactId}/matches`,
-      { params: { type, limit } }
+      {
+        params: {
+          type,
+          limit,
+          tags: tags && tags.length ? tags.join(',') : undefined,
+          exclude_tags,
+        },
+      }
     );
     return response.data;
   },

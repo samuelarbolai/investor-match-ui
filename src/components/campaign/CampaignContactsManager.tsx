@@ -74,7 +74,7 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
   const queryClient = useQueryClient();
   const [viewMode, setViewMode] = useState<ViewMode>('all');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [filters, setFilters] = useState<ContactFilterParams>({});
+  const [filters, setFilters] = useState<ContactFilterParams>({ exclude_tags: ['coverage'], tags: [] });
 
   // All contacts view state
   const [allSortField, setAllSortField] = useState<ContactSortField>('updated_at');
@@ -103,14 +103,28 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
     return rest;
   }, [filters]);
 
+  const effectiveTags = remoteFilters.tags ?? [];
+  const hasTagsFilter = effectiveTags.length > 0;
+
   const hasRemoteFilters = useMemo(() => {
-    return Object.entries(remoteFilters).some(([_, value]) => {
+    return Object.entries(remoteFilters).some(([key, value]) => {
+      if (key === 'tags') {
+        return hasTagsFilter;
+      }
+      if (key === 'exclude_tags') {
+        return false;
+      }
+      if (key === 'stage_count_filters') {
+        return Object.values(remoteFilters.stage_count_filters ?? {}).some(
+          (range) => range && (range.min !== undefined || range.max !== undefined)
+        );
+      }
       if (Array.isArray(value)) {
         return value.length > 0;
       }
       return value !== undefined && value !== null && value !== '';
     });
-  }, [remoteFilters]);
+  }, [hasTagsFilter, remoteFilters]);
 
   const matchesLocalFilter = useCallback(
     (contact: Contact) => {
@@ -128,6 +142,14 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
 
       if (remoteFilters.location_city && contact.location_city !== remoteFilters.location_city) {
         return false;
+      }
+
+      if (remoteFilters.tags && remoteFilters.tags.length) {
+        const contactTags = contact.tags ?? [];
+        const hasAllTags = remoteFilters.tags.every((tag) => contactTags.includes(tag));
+        if (!hasAllTags) {
+          return false;
+        }
       }
 
       const matchMode = remoteFilters.match_mode ?? 'any';
@@ -179,6 +201,8 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
       startAfter: allStartAfter,
       orderBy: allSortField,
       orderDirection: allSortDirection,
+      tags: effectiveTags,
+      exclude_tags: filters.exclude_tags,
     },
     viewMode === 'all' && !hasRemoteFilters
   );
@@ -191,6 +215,8 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
     limit: rowsPerPage,
     orderBy: allSortField,
     orderDirection: allSortDirection,
+    tags: effectiveTags,
+    exclude_tags: filters.exclude_tags,
   };
 
   const {
@@ -219,6 +245,8 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
       startAfter: campaignStartAfter,
       orderBy: campaignSortField,
       orderDirection: campaignSortDirection,
+      tags: effectiveTags,
+      exclude_tags: filters.exclude_tags,
     },
     viewMode === 'campaign'
   );
@@ -235,7 +263,13 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
     refetch: refetchMembership,
   } = useCampaignMembership(campaignId);
 
-  const matchQuery = useMatches(campaignId, contactType, 25);
+  const matchQuery = useMatches(
+    campaignId,
+    contactType,
+    25,
+    effectiveTags.length ? effectiveTags : undefined,
+    filters.exclude_tags
+  );
   const matchCandidates = useMemo<MatchCandidate[]>(
     () => matchQuery.data?.candidates ?? [],
     [matchQuery.data]
@@ -286,7 +320,11 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
   const matchesTotalPages = Math.ceil(matchesContacts.length / rowsPerPage);
 
   const handleApplyFilters = (newFilters: ContactFilterParams) => {
-    setFilters(newFilters);
+    setFilters({
+      ...newFilters,
+      exclude_tags: newFilters.exclude_tags ?? ['coverage'],
+      tags: newFilters.tags ?? [],
+    });
     setAllPage(0);
     setCampaignPage(0);
     setMatchesPage(0);
@@ -295,7 +333,7 @@ export const CampaignContactsManager = ({ campaignId, contactType }: CampaignCon
   };
 
   const handleClearFilters = () => {
-    setFilters({});
+    setFilters({ exclude_tags: ['coverage'], tags: [] });
     setAllPage(0);
     setCampaignPage(0);
     setMatchesPage(0);
